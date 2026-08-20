@@ -1,0 +1,5 @@
+metric,value
+2018 Accuracy,0.597
+2024 Accuracy,0.631
+Combined Accuracy,0.614
+Combined Macro F1,0.5298351508010501

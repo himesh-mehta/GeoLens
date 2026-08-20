@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-green-50: #f0fdf4;
+  --brand-green-100: #dcfce7;
+  --brand-green-600: #16a34a;
+  --brand-green-700: #15803d;
+  --brand-green-800: #166534;
+  --brand-green-950: #052e16;
+
+  --brand-blue-50: #f0f9ff;
+  --brand-blue-100: #e0f2fe;
+  --brand-blue-600: #0284c7;
+  --brand-blue-700: #0369a1;
+  --brand-blue-800: #075985;
+
+  --brand-purple-50: #faf5ff;
+  --brand-purple-100: #f3e8ff;
+  --brand-purple-600: #7c3aed;
+  --brand-purple-700: #6d28d9;
+  --brand-purple-800: #5b21b6;
+
+  --brand-neutral-50: #f8fafc;
+  --brand-neutral-100: #f1f5f9;
+  --brand-neutral-200: #e2e8f0;
+  --brand-neutral-300: #cbd5e1;
+  --brand-neutral-700: #334155;
+  --brand-neutral-900: #0f172a;
+}
+
+@layer base {
+  body {
+    background-color: var(--brand-neutral-50);
+    color: var(--brand-neutral-900);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Accessible visible focus outline */
+  button:focus-visible, 
+  a:focus-visible, 
+  input:focus-visible, 
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--brand-green-700);
+  }
+}

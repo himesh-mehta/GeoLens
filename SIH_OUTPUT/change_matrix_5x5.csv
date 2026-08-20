@@ -1,0 +1,6 @@
+prediction_2018_name,Water,Vegetation,Agriculture,Built-up,Barren
+Water,677,32,14,11,5
+Vegetation,31,1230,205,222,15
+Agriculture,12,255,1064,306,7
+Built-up,12,61,75,1711,13
+Barren,5,7,0,12,18

@@ -1,0 +1,434 @@
+{
+  "models": [
+    {
+      "model": "Baseline Random Forest",
+      "accuracy": 0.6879,
+      "macro_f1": 0.5993,
+      "weighted_f1": 0.6873,
+      "macro_precision": 0.6765,
+      "macro_recall": 0.5875,
+      "per_class": {
+        "Water": {
+          "precision": 0.9653,
+          "recall": 0.9026,
+          "f1": 0.9329,
+          "support": 308
+        },
+        "Vegetation": {
+          "precision": 0.6313,
+          "recall": 0.6905,
+          "f1": 0.6596,
+          "support": 630
+        },
+        "Agriculture": {
+          "precision": 0.5341,
+          "recall": 0.5487,
+          "f1": 0.5413,
+          "support": 585
+        },
+        "Built-up": {
+          "precision": 0.7518,
+          "recall": 0.7244,
+          "f1": 0.7379,
+          "support": 849
+        },
+        "Barren": {
+          "precision": 0.5,
+          "recall": 0.0714,
+          "f1": 0.125,
+          "support": 28
+        }
+      },
+      "confusion_matrix": {
+        "labels": [
+          "Water",
+          "Vegetation",
+          "Agriculture",
+          "Built-up",
+          "Barren"
+        ],
+        "matrix": [
+          [
+            278,
+            12,
+            5,
+            13,
+            0
+          ],
+          [
+            8,
+            435,
+            126,
+            59,
+            2
+          ],
+          [
+            2,
+            154,
+            321,
+            108,
+            0
+          ],
+          [
+            0,
+            87,
+            147,
+            615,
+            0
+          ],
+          [
+            0,
+            1,
+            2,
+            23,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "model": "Improved Random Forest (Tuned)",
+      "accuracy": 0.6787,
+      "macro_f1": 0.5937,
+      "weighted_f1": 0.6798,
+      "macro_precision": 0.6517,
+      "macro_recall": 0.5829,
+      "per_class": {
+        "Water": {
+          "precision": 0.9622,
+          "recall": 0.9091,
+          "f1": 0.9349,
+          "support": 308
+        },
+        "Vegetation": {
+          "precision": 0.6337,
+          "recall": 0.6619,
+          "f1": 0.6475,
+          "support": 630
+        },
+        "Agriculture": {
+          "precision": 0.5084,
+          "recall": 0.5675,
+          "f1": 0.5363,
+          "support": 585
+        },
+        "Built-up": {
+          "precision": 0.7541,
+          "recall": 0.7044,
+          "f1": 0.7284,
+          "support": 849
+        },
+        "Barren": {
+          "precision": 0.4,
+          "recall": 0.0714,
+          "f1": 0.1212,
+          "support": 28
+        }
+      },
+      "confusion_matrix": {
+        "labels": [
+          "Water",
+          "Vegetation",
+          "Agriculture",
+          "Built-up",
+          "Barren"
+        ],
+        "matrix": [
+          [
+            280,
+            11,
+            5,
+            12,
+            0
+          ],
+          [
+            8,
+            417,
+            148,
+            55,
+            2
+          ],
+          [
+            3,
+            145,
+            332,
+            105,
+            0
+          ],
+          [
+            0,
+            85,
+            165,
+            598,
+            1
+          ],
+          [
+            0,
+            0,
+            3,
+            23,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "model": "ExtraTrees Classifier (Best Macro F1)",
+      "accuracy": 0.6733,
+      "macro_f1": 0.6209,
+      "weighted_f1": 0.6774,
+      "macro_precision": 0.6826,
+      "macro_recall": 0.6018,
+      "per_class": {
+        "Water": {
+          "precision": 0.9622,
+          "recall": 0.9091,
+          "f1": 0.9349,
+          "support": 308
+        },
+        "Vegetation": {
+          "precision": 0.6308,
+          "recall": 0.6508,
+          "f1": 0.6406,
+          "support": 630
+        },
+        "Agriculture": {
+          "precision": 0.4915,
+          "recall": 0.5966,
+          "f1": 0.539,
+          "support": 585
+        },
+        "Built-up": {
+          "precision": 0.773,
+          "recall": 0.6737,
+          "f1": 0.7199,
+          "support": 849
+        },
+        "Barren": {
+          "precision": 0.5556,
+          "recall": 0.1786,
+          "f1": 0.2703,
+          "support": 28
+        }
+      },
+      "confusion_matrix": {
+        "labels": [
+          "Water",
+          "Vegetation",
+          "Agriculture",
+          "Built-up",
+          "Barren"
+        ],
+        "matrix": [
+          [
+            280,
+            12,
+            5,
+            11,
+            0
+          ],
+          [
+            8,
+            410,
+            164,
+            46,
+            2
+          ],
+          [
+            3,
+            142,
+            349,
+            91,
+            0
+          ],
+          [
+            0,
+            86,
+            189,
+            572,
+            2
+          ],
+          [
+            0,
+            0,
+            3,
+            20,
+            5
+          ]
+        ]
+      }
+    },
+    {
+      "model": "Gradient Boosting (HistGB)",
+      "accuracy": 0.6708,
+      "macro_f1": 0.5988,
+      "weighted_f1": 0.6708,
+      "macro_precision": 0.6846,
+      "macro_recall": 0.5825,
+      "per_class": {
+        "Water": {
+          "precision": 0.9619,
+          "recall": 0.9026,
+          "f1": 0.9313,
+          "support": 308
+        },
+        "Vegetation": {
+          "precision": 0.6312,
+          "recall": 0.6683,
+          "f1": 0.6492,
+          "support": 630
+        },
+        "Agriculture": {
+          "precision": 0.5049,
+          "recall": 0.5299,
+          "f1": 0.5171,
+          "support": 585
+        },
+        "Built-up": {
+          "precision": 0.7248,
+          "recall": 0.7044,
+          "f1": 0.7145,
+          "support": 849
+        },
+        "Barren": {
+          "precision": 0.6,
+          "recall": 0.1071,
+          "f1": 0.1818,
+          "support": 28
+        }
+      },
+      "confusion_matrix": {
+        "labels": [
+          "Water",
+          "Vegetation",
+          "Agriculture",
+          "Built-up",
+          "Barren"
+        ],
+        "matrix": [
+          [
+            278,
+            14,
+            5,
+            11,
+            0
+          ],
+          [
+            8,
+            421,
+            135,
+            66,
+            0
+          ],
+          [
+            2,
+            145,
+            310,
+            128,
+            0
+          ],
+          [
+            1,
+            87,
+            161,
+            598,
+            2
+          ],
+          [
+            0,
+            0,
+            3,
+            22,
+            3
+          ]
+        ]
+      }
+    }
+  ],
+  "best": {
+    "model": "ExtraTrees Classifier (Best Macro F1)",
+    "accuracy": 0.6733,
+    "macro_f1": 0.6209,
+    "weighted_f1": 0.6774,
+    "macro_precision": 0.6826,
+    "macro_recall": 0.6018,
+    "per_class": {
+      "Water": {
+        "precision": 0.9622,
+        "recall": 0.9091,
+        "f1": 0.9349,
+        "support": 308
+      },
+      "Vegetation": {
+        "precision": 0.6308,
+        "recall": 0.6508,
+        "f1": 0.6406,
+        "support": 630
+      },
+      "Agriculture": {
+        "precision": 0.4915,
+        "recall": 0.5966,
+        "f1": 0.539,
+        "support": 585
+      },
+      "Built-up": {
+        "precision": 0.773,
+        "recall": 0.6737,
+        "f1": 0.7199,
+        "support": 849
+      },
+      "Barren": {
+        "precision": 0.5556,
+        "recall": 0.1786,
+        "f1": 0.2703,
+        "support": 28
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "Water",
+        "Vegetation",
+        "Agriculture",
+        "Built-up",
+        "Barren"
+      ],
+      "matrix": [
+        [
+          280,
+          12,
+          5,
+          11,
+          0
+        ],
+        [
+          8,
+          410,
+          164,
+          46,
+          2
+        ],
+        [
+          3,
+          142,
+          349,
+          91,
+          0
+        ],
+        [
+          0,
+          86,
+          189,
+          572,
+          2
+        ],
+        [
+          0,
+          0,
+          3,
+          20,
+          5
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,5 @@
+Model,Accuracy,Macro_F1,Weighted_F1,Macro_Precision,Macro_Recall,Water_F1,Vegetation_F1,Agriculture_F1,Barren_F1,BuiltUp_F1,is_best
+Baseline Random Forest,0.6879,0.5993,0.6873,0.6765,0.5875,0.9329,0.6596,0.5413,0.125,0.7379,False
+Improved Random Forest (Tuned),0.6787,0.5937,0.6798,0.6517,0.5829,0.9349,0.6475,0.5363,0.1212,0.7284,False
+ExtraTrees Classifier (Best Macro F1),0.6733,0.6209,0.6774,0.6826,0.6018,0.9349,0.6406,0.539,0.2703,0.7199,True
+Gradient Boosting (HistGB),0.6708,0.5988,0.6708,0.6846,0.5825,0.9313,0.6492,0.5171,0.1818,0.7145,False

@@ -1,0 +1,14 @@
+[
+  {
+    "point_id": 100,
+    "verdict": "Correct",
+    "notes": "test",
+    "timestamp": "2026-08-19T19:03:03.222560Z"
+  },
+  {
+    "point_id": 500,
+    "verdict": "Correct",
+    "notes": "Automated test review",
+    "timestamp": "2026-08-19T19:44:05.473744+00:00"
+  }
+]
