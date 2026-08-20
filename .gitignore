@@ -1,9 +1,48 @@
-*.pkl
-__pycache__/
-*.pyc
-.venv/
+# Environment Variables
 .env
+.env.*
+!.env.example
+*.env
 .env.local
 .env*.local
+
+# Python Bytecode & Cache
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.so
+.Python
+
+# Large Models & Artifacts
+*.pkl
+*.joblib
+*.h5
+*.onnx
+
+# Node / Next.js
 node_modules/
 .next/
+out/
+build/
+dist/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE & OS Files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

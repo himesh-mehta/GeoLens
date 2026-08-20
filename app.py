@@ -41,6 +41,11 @@ import os
 import io
 import csv
 import json
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from flask import Flask, request, jsonify, render_template, Response
 
 # Load .env file if present
