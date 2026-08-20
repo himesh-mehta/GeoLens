@@ -43,6 +43,13 @@ import csv
 import json
 from flask import Flask, request, jsonify, render_template, Response
 
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from data_sources.sentinel_source import SentinelSource
 from data_sources.isro_source import ISRODataSource
 from ml_layer.model_service import ModelService
