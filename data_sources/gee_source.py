@@ -53,18 +53,23 @@ class GEESource:
         if not GEE_AVAILABLE:
             raise GEEError("GEE_NOT_AUTHENTICATED", f"GEE unavailable: {GEE_AUTH_STATUS}")
 
-    def get_features_for_location(self, lat: float, lon: float, year: int) -> Dict[str, float]:
+    def get_features_for_location(self, lat: float, lon: float, year: int = None, start_date: str = None, end_date: str = None, cloud_threshold: int = 20) -> Dict[str, Any]:
         """
-        Retrieves the 24 required features for a specific lat/lon coordinate for the given year.
+        Retrieves the 24 required features for a specific lat/lon coordinate for the given date range.
+        Returns a dict with 'features' and 'metadata'.
         """
         self.check_availability()
         
         point = ee.Geometry.Point([lon, lat])
         
-        # Get Sentinel-2 SR Harmonized imagery for the year
-        # Using a date range (e.g., Jan 1 to Dec 31)
-        start_date = f"{year}-01-01"
-        end_date = f"{year}-12-31"
+        if start_date is None or end_date is None:
+            if year is None:
+                year = 2024
+            start_date = f"{year}-01-01"
+            end_date = f"{year}-12-31"
+            
+        # Limit to max 1 year if needed, but standard queries shouldn't need strict enforcement if user is controlled.
+        # We'll just pass the dates directly.
         
         # Cloud masking function for Sentinel-2
         def maskS2clouds(image):
@@ -77,12 +82,12 @@ class GEESource:
         s2_collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
                          .filterBounds(point)
                          .filterDate(start_date, end_date)
-                         .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+                         .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', cloud_threshold))
                          .map(maskS2clouds))
                          
         median_image = s2_collection.median()
         
-        # Sentinel-1 SAR Collection
+        # Sentinel-1 SAR Collection (No optical cloud filtering)
         s1_collection = (ee.ImageCollection('COPERNICUS/S1_GRD')
                          .filterBounds(point)
                          .filterDate(start_date, end_date)
@@ -98,7 +103,7 @@ class GEESource:
             raise GEEError("GEE_COMPUTATION_TIMEOUT", f"GEE computation failed or timed out: {str(e)}")
 
         if count == 0:
-            raise GEEError("GEE_DATA_UNAVAILABLE", f"No suitable Sentinel-2 imagery could be retrieved for this region in {year}.")
+            raise GEEError("GEE_DATA_UNAVAILABLE", f"No suitable Sentinel-2 imagery could be retrieved for this region between {start_date} and {end_date}.")
             
         # Calculate derived indices
         image = self._add_indices(median_image)
@@ -117,22 +122,37 @@ class GEESource:
         # Format output exactly as BASE_FEATURE_NAMES
         features = {}
         for feature_name in self.BASE_FEATURE_NAMES:
-            features[feature_name] = float(values.get(feature_name, 0.0))
+            features[feature_name] = float(values.get(feature_name, 0.0)) if values.get(feature_name) is not None else None
             
-        return features
+        return {
+            "features": features,
+            "metadata": {
+                "dataset": "Sentinel-2 Surface Reflectance (Harmonized) & Sentinel-1 GRD",
+                "source_type": "GEE_MULTISPECTRAL",
+                "date_range": {"start": start_date, "end": end_date},
+                "cloud_threshold": cloud_threshold,
+                "images_found": count,
+                "scale": 10,
+                "processing_method": "Cloud-masked multispectral median composite"
+            }
+        }
 
-    def get_features_for_polygon(self, polygon_coords: List[List[float]], year: int, max_samples: int = 500) -> List[Dict[str, float]]:
+    def get_features_for_polygon(self, polygon_coords: List[List[float]], year: int = None, start_date: str = None, end_date: str = None, cloud_threshold: int = 20, max_samples: int = 500) -> Dict[str, Any]:
         """
         Retrieves feature samples for a polygon. 
         Limits requests to a reasonable sample count so GEE does not become slow or exceed limits.
+        Returns a dict with 'samples' and 'metadata'.
         """
         self.check_availability()
         
         polygon = ee.Geometry.Polygon(polygon_coords)
         
-        start_date = f"{year}-01-01"
-        end_date = f"{year}-12-31"
-        
+        if start_date is None or end_date is None:
+            if year is None:
+                year = 2024
+            start_date = f"{year}-01-01"
+            end_date = f"{year}-12-31"
+            
         def maskS2clouds(image):
             qa = image.select('QA60')
             cloudBitMask = 1 << 10
@@ -143,12 +163,12 @@ class GEESource:
         s2_collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
                          .filterBounds(polygon)
                          .filterDate(start_date, end_date)
-                         .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+                         .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', cloud_threshold))
                          .map(maskS2clouds))
                          
         median_image = s2_collection.median().clip(polygon)
         
-        # Sentinel-1 SAR Collection
+        # Sentinel-1 SAR Collection (No optical cloud filtering)
         s1_collection = (ee.ImageCollection('COPERNICUS/S1_GRD')
                          .filterBounds(polygon)
                          .filterDate(start_date, end_date)
@@ -163,7 +183,7 @@ class GEESource:
             raise GEEError("GEE_COMPUTATION_TIMEOUT", f"GEE computation failed or timed out: {str(e)}")
 
         if count == 0:
-            raise GEEError("GEE_DATA_UNAVAILABLE", f"No suitable Sentinel-2 imagery could be retrieved for this polygon in {year}.")
+            raise GEEError("GEE_DATA_UNAVAILABLE", f"No suitable Sentinel-2 imagery could be retrieved for this polygon between {start_date} and {end_date}.")
             
         image = self._add_indices(median_image)
         
@@ -183,7 +203,7 @@ class GEESource:
             raise GEEError("GEE_COMPUTATION_TIMEOUT", f"Failed to extract features (region might be too large): {str(e)}")
         
         if 'features' not in samples or len(samples['features']) == 0:
-            raise GEEError("GEE_FEATURE_EXTRACTION_ERROR", f"Could not extract feature samples for polygon in year {year}.")
+            raise GEEError("GEE_FEATURE_EXTRACTION_ERROR", f"Could not extract feature samples for polygon between {start_date} and {end_date}.")
             
         result = []
         for feat in samples['features']:
@@ -194,14 +214,25 @@ class GEESource:
             # Format exactly matching BASE_FEATURE_NAMES
             pt_features = {}
             for name in self.BASE_FEATURE_NAMES:
-                pt_features[name] = float(props.get(name, 0.0))
+                pt_features[name] = float(props.get(name, 0.0)) if props.get(name) is not None else None
                 
             result.append({
                 "features": pt_features,
                 "coordinates": coords
             })
             
-        return result
+        return {
+            "samples": result,
+            "metadata": {
+                "dataset": "Sentinel-2 Surface Reflectance (Harmonized) & Sentinel-1 GRD",
+                "source_type": "GEE_MULTISPECTRAL",
+                "date_range": {"start": start_date, "end": end_date},
+                "cloud_threshold": cloud_threshold,
+                "images_found": count,
+                "scale": 20,
+                "processing_method": "Cloud-masked multispectral median composite"
+            }
+        }
 
     def _add_indices(self, image):
         """Adds all the required 24 spectral and derived indices to the GEE image."""

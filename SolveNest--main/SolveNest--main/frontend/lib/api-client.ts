@@ -59,16 +59,22 @@ export const BackendAPI = {
   getSpatialValidation: () => fetchFromBackend('/api/spatial-validation'),
   getDataQuality: () => fetchFromBackend('/api/data-quality'),
   
-  predictLocation: (latitude: number, longitude: number, year: number) =>
+  predictLocation: (latitude: number, longitude: number, year: number, startDate?: string, endDate?: string, cloudThreshold?: number) =>
     fetchFromBackend('/api/predict/location', {
       method: 'POST',
-      body: JSON.stringify({ latitude, longitude, year })
+      body: JSON.stringify({ latitude, longitude, year, start_date: startDate, end_date: endDate, cloud_threshold: cloudThreshold })
     }),
     
-  predictPolygon: (polygon: number[][], year: number) =>
+  predictPolygon: (polygon: number[][], year: number, startDate?: string, endDate?: string, cloudThreshold?: number) =>
     fetchFromBackend('/api/predict/polygon', {
       method: 'POST',
-      body: JSON.stringify({ polygon, year })
+      body: JSON.stringify({ polygon, year, start_date: startDate, end_date: endDate, cloud_threshold: cloudThreshold })
+    }),
+  
+  compareDynamic: (location: string, year1: number, year2: number) =>
+    fetchFromBackend('/api/comparisons/dynamic', {
+      method: 'POST',
+      body: JSON.stringify({ location, year1, year2 })
     }),
   
   askGPTOSS: (question: string, region: string, pointId?: number) =>
@@ -90,11 +96,50 @@ export const BackendAPI = {
       body: JSON.stringify(payload)
     }),
 
-  analyzeImage: (pointId?: number) =>
-    fetchFromBackend('/api/analyze-image', {
+  aiAnalyze: (payload: {
+    analysis_result: any;
+    question?: string;
+    context?: any;
+  }) =>
+    fetchFromBackend('/api/ai/analyze', {
       method: 'POST',
-      body: JSON.stringify({ point_id: pointId })
+      body: JSON.stringify(payload)
     }),
+    
+  aiAnalyzeImage: (payload: {
+    analysis_result: any;
+  }) =>
+    fetchFromBackend('/api/ai/analyze-image', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+
+  analyzeImage: async (fileOrPointId?: File | File[] | number | string) => {
+    if (fileOrPointId instanceof File || (Array.isArray(fileOrPointId) && fileOrPointId.every(f => f instanceof File))) {
+      const formData = new FormData();
+      if (Array.isArray(fileOrPointId)) {
+        fileOrPointId.forEach(file => formData.append('files', file));
+      } else {
+        formData.append('files', fileOrPointId as File);
+      }
+      const res = await fetch(`${API_BASE}/api/analyze-image`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) throw new Error(`Backend error: ${res.status}`);
+      return res.json();
+    } else if (typeof fileOrPointId === 'string') {
+      return fetchFromBackend('/api/analyze-image', {
+        method: 'POST',
+        body: JSON.stringify({ image_base64: fileOrPointId })
+      });
+    } else {
+      return fetchFromBackend('/api/analyze-image', {
+        method: 'POST',
+        body: JSON.stringify({ point_id: fileOrPointId })
+      });
+    }
+  },
 
   submitFeedback: (pointId: number, verdict: string, notes?: string) =>
     fetchFromBackend('/api/feedback', {

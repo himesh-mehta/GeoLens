@@ -9,11 +9,9 @@ import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { AreaCard } from '@/components/areas/area-card';
 import { areasService, SavedArea } from '@/services/areas-service';
-import { useTranslation } from '@/lib/i18n';
 
 export default function MyAreasPage() {
   const router = useRouter();
-  const { t } = useTranslation();
   const [areas, setAreas] = useState<SavedArea[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -37,8 +35,16 @@ export default function MyAreasPage() {
     loadAreas();
   }, []);
 
-  const handleOpen = (areaId: string) => {
-    router.push(`/viewer?area=${areaId}`);
+  const handleOpen = (area: SavedArea) => {
+    router.push(`/explorer?lat=${area.latitude}&lon=${area.longitude}&name=${encodeURIComponent(area.name)}`);
+  };
+
+  const handleAnalyzeAgain = (area: SavedArea) => {
+    router.push(`/explorer?lat=${area.latitude}&lon=${area.longitude}&name=${encodeURIComponent(area.name)}&auto_analyze=true`);
+  };
+
+  const handleViewReport = (area: SavedArea) => {
+    router.push(`/reports?area=${area.id}`);
   };
 
   const handleRemove = (areaId: string) => {
@@ -49,7 +55,7 @@ export default function MyAreasPage() {
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto py-8">
-        <LoadingState message={t('myAreas.loadingAreas')} size="md" />
+        <LoadingState message="Loading your saved areas..." size="md" />
       </div>
     );
   }
@@ -58,8 +64,8 @@ export default function MyAreasPage() {
     return (
       <div className="max-w-4xl mx-auto py-8">
         <ErrorState
-          title={t('myAreas.loadError')}
-          message={t('common.tryAgain')}
+          title="Failed to load areas"
+          message="Please try again."
           onRetry={loadAreas}
         />
       </div>
@@ -67,15 +73,15 @@ export default function MyAreasPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-4 md:py-8 space-y-6">
+    <div className="max-w-5xl mx-auto py-4 md:py-8 space-y-6">
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h3 className="text-xl md:text-2xl font-bold text-brand-neutral-900">
-            {t('myAreas.title')}
+            My Areas
           </h3>
           <p className="text-sm text-brand-neutral-700 mt-1">
-            {t('myAreas.subtitle')}
+            Manage your saved locations and analysis results.
           </p>
         </div>
         <Button
@@ -84,7 +90,7 @@ export default function MyAreasPage() {
           onClick={() => router.push('/select-area')}
           leftIcon={<PlusCircle className="h-4 w-4" />}
         >
-          {t('myAreas.exploreNew')}
+          Add New Area
         </Button>
       </div>
 
@@ -92,18 +98,20 @@ export default function MyAreasPage() {
       {areas.length === 0 ? (
         <EmptyState
           icon={<Map className="h-8 w-8 text-brand-neutral-300" />}
-          title={t('myAreas.noAreas')}
-          description={t('myAreas.noAreasDesc')}
-          actionText={t('myAreas.exploreArea')}
+          title="No Areas Saved"
+          description="You haven't saved any locations yet. Add a new area to track satellite data over time."
+          actionText="Find an Area"
           onAction={() => router.push('/select-area')}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {areas.map(area => (
             <AreaCard
               key={area.id}
               area={area}
-              onOpen={() => handleOpen(area.id)}
+              onOpen={() => handleOpen(area)}
+              onAnalyzeAgain={() => handleAnalyzeAgain(area)}
+              onViewReport={() => handleViewReport(area)}
               onRemove={() => handleRemove(area.id)}
             />
           ))}

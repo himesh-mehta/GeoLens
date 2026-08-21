@@ -157,9 +157,9 @@ function ViewerContent() {
       areasService.saveArea({
         id: location.id,
         name: location.name,
-        state: location.region,
-        lastChecked: 'May 2025',
-      });
+        
+        
+      } as any);
       setIsSaved(true);
     }
   };
@@ -192,10 +192,10 @@ function ViewerContent() {
         areasService.saveArea({
           id: location.id,
           name: location.name,
-          state: location.region,
-          lastChecked: 'May 2025',
-          recentFinding: `${firstFinding.title} ${firstFinding.statusLabel.toLowerCase()}`,
-        });
+          
+          
+          
+        } as any);
       }
     } catch (err: any) {
       console.error("Analysis failed", err);

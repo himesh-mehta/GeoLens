@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, MapPin, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Search, MapPin, ArrowLeft, Crosshair, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState } from '@/components/ui/loading-state';
 import dynamic from 'next/dynamic';
-import { eoService, Location } from '@/services/eo-service';
+import { useTranslation } from '@/lib/i18n';
 
 const MapComponent = dynamic(
   () => import('@/components/map/MapComponent'),
@@ -20,7 +20,13 @@ const MapComponent = dynamic(
     ),
   }
 );
-import { useTranslation } from '@/lib/i18n';
+
+interface UnifiedSelection {
+  lat: number;
+  lon: number;
+  name: string;
+  method: 'search' | 'manual' | 'map';
+}
 
 export default function SelectAreaPage() {
   const router = useRouter();
@@ -28,68 +34,118 @@ export default function SelectAreaPage() {
   
   // State variables
   const [isLoadingMap, setIsLoadingMap] = useState(true);
+  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('search');
+  
+  // Search state
   const [searchQuery, setSearchQuery] = useState('');
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<{lat: string, lon: string, display_name: string}[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Load locations on mount and simulate map loading
+  // Manual state
+  const [manualLat, setManualLat] = useState('');
+  const [manualLon, setManualLon] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
+
+  // Unified selection
+  const [selectedArea, setSelectedArea] = useState<UnifiedSelection | null>(null);
+
   useEffect(() => {
-    const fetchLocations = async () => {
-      try {
-        const allLocs = await eoService.getAllLocations();
-        setLocations(allLocs);
-      } catch (err) {
-        console.error("Failed to load locations", err);
-      } finally {
-        setIsLoadingMap(false);
-      }
-    };
-    
     // Simulate map loading delay
     const timer = setTimeout(() => {
-      fetchLocations();
-    }, 1000);
-
+      setIsLoadingMap(false);
+    }, 500);
     return () => clearTimeout(timer);
   }, []);
 
-  // Handle location search
+  const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await response.json();
+      if (data && data.display_name) {
+        // Just take the first 3 parts of the address for brevity
+        return data.display_name.split(',').slice(0, 3).join(',');
+      }
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+    }
+    return `Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+  };
+
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
     setSearchError(null);
+    setSearchResults([]);
+    setSelectedArea(null);
 
     try {
-      const result = await eoService.searchLocation(searchQuery);
-      if (result) {
-        setSelectedLocation(result);
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        setSearchResults(data.slice(0, 5));
       } else {
-        setSearchError(t('selectArea.notFound'));
-        setSelectedLocation(null);
+        setSearchError("No locations found. Please try a different search term.");
       }
     } catch (err) {
-      setSearchError(t('selectArea.searchError'));
+      setSearchError("Search failed. Please check your connection.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Continue to EO Viewer
-  // Continue to EO Viewer or Compare
-  const handleConfirmSelection = () => {
-    if (selectedLocation) {
-      if (selectedLocation.id.startsWith('custom-')) {
-        const parts = selectedLocation.id.split('-');
-        if (parts.length >= 3) {
-          router.push(`/compare?lat=${parts[1]}&lon=${parts[2]}`);
-          return;
-        }
-      }
-      router.push(`/compare?area=${selectedLocation.id}`);
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setManualError(null);
+    
+    const lat = parseFloat(manualLat);
+    const lon = parseFloat(manualLon);
+    
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      setManualError("Latitude must be between -90 and 90.");
+      return;
+    }
+    if (isNaN(lon) || lon < -180 || lon > 180) {
+      setManualError("Longitude must be between -180 and 180.");
+      return;
+    }
+
+    const name = await reverseGeocode(lat, lon);
+    
+    setSelectedArea({
+      lat,
+      lon,
+      name,
+      method: 'manual'
+    });
+  };
+
+  const handleMapClick = async (lat: number, lon: number) => {
+    const name = await reverseGeocode(lat, lon);
+    setSelectedArea({
+      lat,
+      lon,
+      name,
+      method: 'map'
+    });
+  };
+
+  const handleSelectResult = (result: {lat: string, lon: string, display_name: string}) => {
+    setSelectedArea({
+      lat: parseFloat(result.lat),
+      lon: parseFloat(result.lon),
+      name: result.display_name.split(',').slice(0, 3).join(','),
+      method: 'search'
+    });
+    setSearchResults([]);
+  };
+
+  const handleAnalyze = () => {
+    if (selectedArea) {
+      router.push(`/explorer?lat=${selectedArea.lat}&lon=${selectedArea.lon}&name=${encodeURIComponent(selectedArea.name)}`);
     }
   };
 
@@ -98,7 +154,6 @@ export default function SelectAreaPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <LoadingState 
           message={t('selectArea.loadingMap')} 
-          description={t('selectArea.loadingMapDesc')} 
           size="lg"
         />
       </div>
@@ -107,7 +162,7 @@ export default function SelectAreaPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 py-2 md:py-4">
-      {/* Back Button and Header */}
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button
           variant="secondary"
@@ -126,118 +181,157 @@ export default function SelectAreaPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map Column */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="h-[400px] rounded-brand-md overflow-hidden border border-brand-neutral-200 z-0 relative">
+          <div className="h-[500px] rounded-brand-md overflow-hidden border border-brand-neutral-200 z-0 relative shadow-sm">
             <MapComponent
               drawMode="point"
-              selectedPoint={selectedLocation ? [
-                parseFloat(selectedLocation.coordinates?.split(',')[0] || '20.5937'),
-                parseFloat(selectedLocation.coordinates?.split(',')[1] || '78.9629')
-              ] : null}
-              onPointSelected={(lat, lon) => {
-                setSelectedLocation({
-                  id: `custom-${lat.toFixed(4)}-${lon.toFixed(4)}`,
-                  name: `Custom Location`,
-                  region: `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
-                  x: 0,
-                  y: 0,
-                  availableDates: ["2018", "2024", "may-2022"],
-                  coordinates: `${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`
-                });
-                setSearchError(null);
-              }}
+              selectedPoint={selectedArea ? [selectedArea.lat, selectedArea.lon] : null}
+              center={selectedArea ? [selectedArea.lat, selectedArea.lon] : [20.5937, 78.9629]}
+              zoom={selectedArea ? 10 : 5}
+              onPointSelected={handleMapClick}
             />
           </div>
-          <p className="text-xs text-brand-neutral-700 italic">
-            {t('selectArea.mapTip')}
+          <p className="text-sm text-slate-500 text-center">
+            You can also click anywhere on the map to select a location.
           </p>
         </div>
 
-        {/* Search & Action Panel Column */}
-        <div className="space-y-6">
-          {/* Search Card */}
-          <Card>
-            <CardContent className="p-4 md:p-6 space-y-4">
-              <h4 className="font-semibold text-brand-neutral-900 text-sm md:text-base">{t('selectArea.searchLabel')}</h4>
-              <form onSubmit={handleSearchSubmit} className="relative">
-                <input
-                  type="text"
-                  placeholder={t('selectArea.searchPlaceholder')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-3 pr-10 py-2 border border-brand-neutral-200 rounded-brand-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-green-700 focus:border-transparent text-brand-neutral-900"
-                />
+        {/* Sidebar Controls */}
+        <div className="flex flex-col gap-4">
+          <Card className="border-brand-neutral-200 shadow-sm">
+            <CardHeader className="pb-3 border-b border-brand-neutral-100">
+              <div className="flex border-b border-brand-neutral-200">
                 <button
-                  type="submit"
-                  disabled={isSearching}
-                  className="absolute right-2 top-2 text-brand-neutral-700 hover:text-brand-neutral-900 disabled:opacity-50 cursor-pointer"
-                  aria-label={t('common.search')}
+                  className={`flex-1 pb-2 text-sm font-medium transition-colors ${activeTab === 'search' ? 'text-brand-primary-600 border-b-2 border-brand-primary-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  onClick={() => setActiveTab('search')}
                 >
-                  <Search className="h-5 w-5" />
+                  Search Place
                 </button>
-              </form>
-
-              {/* Search Feedback / Errors */}
-              {isSearching && (
-                <p className="text-xs text-brand-neutral-700">{t('selectArea.searching')}</p>
-              )}
-
-              {searchError && (
-                <div className="flex items-start gap-2 text-status-warning-text bg-status-warning-bg/10 p-3 rounded-brand-md border border-status-warning-border">
-                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs">{searchError}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Selected Place Details Card */}
-          <Card className="bg-white">
-            <CardContent className="p-4 md:p-6 space-y-6">
-              <div>
-                <h4 className="font-semibold text-brand-neutral-700 text-xs uppercase tracking-wider">
-                  {t('selectArea.selectedArea')}
-                </h4>
-                {selectedLocation ? (
-                  <div className="mt-3 flex items-start gap-3">
-                    <div className="p-2 bg-brand-green-50 text-brand-green-700 rounded-brand-md">
-                      <MapPin className="h-5 w-5" />
+                <button
+                  className={`flex-1 pb-2 text-sm font-medium transition-colors ${activeTab === 'manual' ? 'text-brand-primary-600 border-b-2 border-brand-primary-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  onClick={() => setActiveTab('manual')}
+                >
+                  Coordinates
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {activeTab === 'search' ? (
+                <form onSubmit={handleSearchSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Location Name</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="e.g., Ghatkopar, Mumbai"
+                          className="w-full pl-9 pr-3 py-2 bg-white border border-brand-neutral-200 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary-500/20 focus:border-brand-primary-500 text-sm"
+                        />
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      </div>
+                      <Button type="submit" disabled={isSearching} variant="primary">
+                        {isSearching ? 'Searching...' : 'Find'}
+                      </Button>
+                    </div>
+                    {searchError && (
+                      <p className="text-sm text-red-500 mt-2">{searchError}</p>
+                    )}
+                  </div>
+                  
+                  {searchResults.length > 0 && (
+                    <div className="border border-slate-200 rounded-md overflow-hidden divide-y divide-slate-100">
+                      {searchResults.map((res, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleSelectResult(res)}
+                          className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col"
+                        >
+                          <span className="text-sm font-medium text-slate-800 line-clamp-1">{res.display_name}</span>
+                          <span className="text-xs text-slate-500">{parseFloat(res.lat).toFixed(4)}, {parseFloat(res.lon).toFixed(4)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </form>
+              ) : (
+                <form onSubmit={handleManualSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={manualLat}
+                        onChange={(e) => setManualLat(e.target.value)}
+                        placeholder="e.g., 19.0760"
+                        className="w-full px-3 py-2 bg-white border border-brand-neutral-200 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary-500/20 focus:border-brand-primary-500 text-sm"
+                        required
+                      />
                     </div>
                     <div>
-                      <h5 className="font-bold text-brand-neutral-900 text-base md:text-lg">
-                        {selectedLocation.name}, {selectedLocation.region}
-                      </h5>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-brand-green-50 text-brand-green-700 border border-brand-green-100 text-[10px] font-semibold mt-1">
-                        {t('selectArea.areaSelected')}
-                      </span>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={manualLon}
+                        onChange={(e) => setManualLon(e.target.value)}
+                        placeholder="e.g., 72.8777"
+                        className="w-full px-3 py-2 bg-white border border-brand-neutral-200 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary-500/20 focus:border-brand-primary-500 text-sm"
+                        required
+                      />
                     </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-brand-neutral-700 mt-2">
-                    {t('selectArea.noAreaSelected')}
-                  </p>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-2 border-t border-brand-neutral-100">
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  disabled={!selectedLocation}
-                  onClick={handleConfirmSelection}
-                >
-                  {t('selectArea.viewThisArea')}
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => router.push('/')}
-                >
-                  {t('selectArea.changeArea')}
-                </Button>
-              </div>
+                  {manualError && (
+                    <p className="text-sm text-red-500">{manualError}</p>
+                  )}
+                  <Button type="submit" variant="primary" className="w-full" leftIcon={<Crosshair className="h-4 w-4" />}>
+                    Locate on Map
+                  </Button>
+                </form>
+              )}
             </CardContent>
           </Card>
+
+          {/* Selected Area Card */}
+          {selectedArea && (
+            <Card className="border-brand-primary-200 bg-brand-primary-50 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-brand-primary-800 text-lg flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Location Selected
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-white rounded-md p-3 border border-brand-primary-100">
+                  <p className="text-sm font-medium text-slate-800 line-clamp-2" title={selectedArea.name}>
+                    {selectedArea.name}
+                  </p>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                    <div>
+                      <span className="font-medium">Lat:</span> {selectedArea.lat.toFixed(5)}
+                    </div>
+                    <div>
+                      <span className="font-medium">Lon:</span> {selectedArea.lon.toFixed(5)}
+                    </div>
+                  </div>
+                  <div className="mt-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    Method: {selectedArea.method}
+                  </div>
+                </div>
+                
+                <Button 
+                  variant="primary" 
+                  className="w-full shadow-sm"
+                  onClick={handleAnalyze}
+                  rightIcon={<ArrowRight className="h-4 w-4" />}
+                >
+                  Analyze in Map Explorer
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

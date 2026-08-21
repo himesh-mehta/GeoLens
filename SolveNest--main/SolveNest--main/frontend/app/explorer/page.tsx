@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Search, MapPin, Layers, Crosshair, Pentagon,
   Trash2, BarChart2, AlertTriangle, Satellite, Info, ChevronDown,
-  GitCompare, Image as ImageIcon
+  GitCompare, Image as ImageIcon, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BackendAPI } from '@/lib/api-client';
 import { areasService } from '@/services/areas-service';
+import { AIAnalysisModal } from '@/components/analysis/ai-analysis-modal';
 
 // Dynamic import to avoid SSR issues with Leaflet
 const MapComponent = dynamic(
@@ -32,7 +33,7 @@ interface PredictionResult {
   probabilities: Record<string, number>;
   year_status: string;
   validated_accuracy_available: boolean;
-  year: number;
+  date_range: string;
   latitude: number;
   longitude: number;
   features?: Record<string, number>;
@@ -40,21 +41,13 @@ interface PredictionResult {
 
 interface PolygonResult {
   samples_analyzed: number;
-  year: number;
+  date_range: string;
   distribution: Record<string, { sample_count: number; regional_landcover_percentage: number }>;
   year_status: string;
   validated_accuracy_available: boolean;
 }
 
-const AVAILABLE_YEARS = [
-  { year: 2018, status: 'validated' },
-  { year: 2019, status: 'unseen_inference' },
-  { year: 2020, status: 'unseen_inference' },
-  { year: 2021, status: 'unseen_inference' },
-  { year: 2022, status: 'unseen_inference' },
-  { year: 2023, status: 'unseen_inference' },
-  { year: 2024, status: 'validated' },
-];
+
 
 const CLASS_COLORS: Record<string, string> = {
   'Water': '#3b82f6',
@@ -76,8 +69,76 @@ export default function ExplorerPage() {
   // Input state
   const [latInput, setLatInput] = useState('');
   const [lonInput, setLonInput] = useState('');
-  const [selectedYear, setSelectedYear] = useState(2024);
-  const [searchQuery, setSearchQuery] = useState('');
+    const [startDate, setStartDate] = useState('01/01/2024');
+  const [endDate, setEndDate] = useState('31/12/2024');
+  const [cloudThreshold, setCloudThreshold] = useState(20);
+    const [locationName, setLocationName] = useState<string>('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const lat = params.get('lat');
+      const lon = params.get('lon');
+      const name = params.get('name');
+      const autoAnalyze = params.get('auto_analyze');
+
+      if (lat && lon) {
+        const latF = parseFloat(lat);
+        const lonF = parseFloat(lon);
+        if (!isNaN(latF) && !isNaN(lonF)) {
+          setSelectedPoint([latF, lonF]);
+          setLatInput(lat);
+          setLonInput(lon);
+          if (name) setLocationName(name);
+          
+          if (autoAnalyze === 'true') {
+             setTimeout(() => {
+               document.getElementById('analyze-btn')?.click();
+             }, 1000);
+          }
+        }
+      }
+    }
+  }, []);
+
+  const handleSaveArea = () => {
+    if (!selectedPoint || !pointResult) return;
+    
+    // Safely extract spectral indices directly from the backend's `features` dictionary if available
+    // Do not generate or fabricate these values
+    let ndvi: string | number = "Not available — required spectral bands unavailable.";
+    let ndwi: string | number = "Not available — required spectral bands unavailable.";
+    let ndbi: string | number = "Not available — required spectral bands unavailable.";
+    
+    if (pointResult.features) {
+      if (typeof pointResult.features.NDVI === 'number') ndvi = pointResult.features.NDVI;
+      if (typeof pointResult.features.NDWI === 'number') ndwi = pointResult.features.NDWI;
+      if (typeof pointResult.features.NDBI === 'number') ndbi = pointResult.features.NDBI;
+    }
+
+    const savedArea = {
+      id: `area-${Date.now()}`,
+      name: locationName || `Area (${selectedPoint[0].toFixed(4)}, ${selectedPoint[1].toFixed(4)})`,
+      latitude: selectedPoint[0],
+      longitude: selectedPoint[1],
+      createdAt: new Date().toISOString(),
+      lastAnalyzedDate: new Date().toISOString(),
+      latestAnalysis: {
+        verification: pointResult.year_status === 'validated_year' ? 'Verified Satellite Data' : 'Visual Analysis / Fallback',
+        predClass: pointResult.prediction,
+        confidence: pointResult.confidence,
+        ndvi,
+        ndwi,
+        ndbi
+      }
+    };
+    
+    areasService.saveArea(savedArea as any);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{lat: string, lon: string, display_name: string}[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -88,6 +149,7 @@ export default function ExplorerPage() {
   const [polygonResult, setPolygonResult] = useState<PolygonResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [geeStatus, setGeeStatus] = useState<'checking' | 'connected' | 'unavailable'>('checking');
+  const [showAI, setShowAI] = useState(false);
 
   React.useEffect(() => {
     BackendAPI.getHealthGee().then((res: any) => {
@@ -99,10 +161,7 @@ export default function ExplorerPage() {
     }).catch(() => setGeeStatus('unavailable'));
   }, []);
 
-  // Year info
-  const yearInfo = AVAILABLE_YEARS.find(y => y.year === selectedYear);
-  const isInferenceYear = yearInfo?.status === 'unseen_inference';
-
+  
   const handlePointSelected = useCallback((lat: number, lon: number) => {
     setSelectedPoint([lat, lon]);
     setSelectedPolygon(null);
@@ -111,6 +170,7 @@ export default function ExplorerPage() {
     setPointResult(null);
     setPolygonResult(null);
     setErrorMessage(null);
+    setShowAI(false);
   }, []);
 
   const handlePolygonSelected = useCallback((coords: [number, number][]) => {
@@ -119,6 +179,7 @@ export default function ExplorerPage() {
     setPointResult(null);
     setPolygonResult(null);
     setErrorMessage(null);
+    setShowAI(false);
   }, []);
 
   const handleClearSelection = () => {
@@ -129,6 +190,7 @@ export default function ExplorerPage() {
     setPointResult(null);
     setPolygonResult(null);
     setErrorMessage(null);
+    setShowAI(false);
   };
 
   const handleManualCoords = () => {
@@ -141,12 +203,19 @@ export default function ExplorerPage() {
     }
   };
 
+  const parseDate = (d: string) => {
+    const parts = d.split('/');
+    if(parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    return d;
+  };
+
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setLoadingStep(1); // 1: Fetching Sentinel-2 imagery...
     setErrorMessage(null);
     setPointResult(null);
     setPolygonResult(null);
+    setShowAI(false);
 
     // Simulate step 2 and 3 for UI feedback (since backend call is blocking)
     const step2Timer = setTimeout(() => setLoadingStep(2), 1500); // Computing spectral features
@@ -154,16 +223,28 @@ export default function ExplorerPage() {
 
     try {
       if (selectedPoint) {
-        const res = await BackendAPI.predictLocation(selectedPoint[0], selectedPoint[1], selectedYear) as any;
+        const res = await BackendAPI.predictLocation(selectedPoint[0], selectedPoint[1], undefined as any, parseDate(startDate), parseDate(endDate), cloudThreshold) as any;
         if (!res || res.status === 'error') {
           setErrorMessage(res?.message || 'Prediction failed. The backend may be unavailable.');
         } else {
-          setPointResult(res as PredictionResult);
+          // Map the nested backend response to the flat PredictionResult interface
+          const mappedRes: PredictionResult = {
+            prediction: res.point.prediction,
+            confidence: res.point.confidence,
+            probabilities: res.point.probabilities,
+            features: res.point.features,
+            latitude: res.location.latitude,
+            longitude: res.location.longitude,
+            date_range: `${startDate} - ${endDate}`,
+            year_status: res.is_fallback ? 'inference_only' : 'validated_year',
+            validated_accuracy_available: !res.is_fallback
+          };
+          setPointResult(mappedRes);
           areasService.addHistoryItem({
             areaId: `custom-${selectedPoint[0].toFixed(4)}-${selectedPoint[1].toFixed(4)}`,
             areaName: `Point: ${selectedPoint[0].toFixed(4)}, ${selectedPoint[1].toFixed(4)}`,
             type: 'analysis',
-            date: String(selectedYear),
+            date: `${startDate}-${endDate}`,
             status: 'completed',
           });
         }
@@ -171,16 +252,24 @@ export default function ExplorerPage() {
         // Convert [lat,lon] to [lon,lat] for GeoJSON
         const geoCoords = selectedPolygon.map(c => [c[1], c[0]]);
         geoCoords.push(geoCoords[0]); // close polygon
-        const res = await BackendAPI.predictPolygon(geoCoords, selectedYear) as any;
+        const res = await BackendAPI.predictPolygon(geoCoords, undefined as any, parseDate(startDate), parseDate(endDate), cloudThreshold) as any;
         if (!res || res.status === 'error') {
           setErrorMessage(res?.message || 'Polygon analysis failed. The backend may be unavailable.');
         } else {
-          setPolygonResult(res as PolygonResult);
+          // Map the nested backend response to the flat PolygonResult interface
+          const mappedPolyRes: PolygonResult = {
+            samples_analyzed: res.samples_analyzed,
+            distribution: res.aoi_statistics?.distribution || {},
+            date_range: `${startDate} - ${endDate}`,
+            year_status: res.is_fallback ? 'inference_only' : 'validated_year',
+            validated_accuracy_available: !res.is_fallback
+          };
+          setPolygonResult(mappedPolyRes);
           areasService.addHistoryItem({
             areaId: `polygon-${Date.now()}`,
             areaName: `Polygon Area Analysis`,
             type: 'analysis',
-            date: String(selectedYear),
+            date: `${startDate} - ${endDate}`,
             status: 'completed',
           });
         }
@@ -335,35 +424,64 @@ export default function ExplorerPage() {
             </Button>
           </div>
 
-          {/* Year Selector */}
+          {/* Date Range Selector */}
           <div className="p-4 space-y-3 border-b border-[#e2e8f0]">
-            <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider">Year</h4>
-            <div className="grid grid-cols-4 gap-1.5">
-              {AVAILABLE_YEARS.map(y => (
-                <button
-                  key={y.year}
-                  onClick={() => setSelectedYear(y.year)}
-                  className={`relative px-2 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    selectedYear === y.year
-                      ? 'bg-[#10b981] text-white shadow-sm'
-                      : 'bg-[#f1f5f9] text-[#334155] hover:bg-[#e2e8f0]'
-                  }`}
-                >
-                  {y.year}
-                  {y.status === 'validated' && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#10b981] rounded-full border border-white" />
-                  )}
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider">Analysis Period</h4>
             </div>
-            {isInferenceYear && (
-              <div className="flex items-start gap-2 p-2 bg-[#fffbeb] border border-[#fde68a] rounded-md">
-                <AlertTriangle className="h-3.5 w-3.5 text-[#d97706] flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-[#92400e]">
-                  <strong>Inference-only year.</strong> Model trained/validated on 2018 and 2024. No independent validation for {selectedYear}.
-                </p>
-              </div>
-            )}
+            
+            <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-[#64748b] mb-1 block">Start Date (DD/MM/YYYY)</label>
+                  <input
+                    type="text"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    placeholder="01/01/2024"
+                    className="w-full px-3 py-1.5 text-sm border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#64748b] mb-1 block">End Date (DD/MM/YYYY)</label>
+                  <input
+                    type="text"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    placeholder="31/12/2024"
+                    className="w-full px-3 py-1.5 text-sm border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] outline-none"
+                  />
+                </div>
+            </div>
+            
+            <div>
+               <label className="text-xs text-[#64748b] mb-1 block">Presets</label>
+               <div className="flex flex-wrap gap-1">
+                   <button onClick={() => { setStartDate('01/01/2024'); setEndDate('31/12/2024'); }} className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded">2024</button>
+                   <button onClick={() => { setStartDate('01/01/2020'); setEndDate('31/12/2020'); }} className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded">2020</button>
+                   <button onClick={() => { setStartDate('01/01/2018'); setEndDate('31/12/2018'); }} className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded">2018</button>
+                   <button onClick={() => { 
+                       const today = new Date();
+                       const past = new Date(); past.setDate(today.getDate() - 30);
+                       const d = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+                       setStartDate(d(past)); setEndDate(d(today));
+                   }} className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded">Last 30 Days</button>
+               </div>
+            </div>
+
+            <div className="mt-2">
+                <label className="text-xs text-[#64748b] mb-1 flex items-center justify-between">
+                    <span>Cloud Threshold (Max %): {cloudThreshold}%</span>
+                </label>
+                <input 
+                    type="range" 
+                    min="0" max="100" 
+                    value={cloudThreshold} 
+                    onChange={e => setCloudThreshold(parseInt(e.target.value))}
+                    className="w-full"
+                />
+            </div>
+
+            
           </div>
 
           {/* Draw Tools */}
@@ -487,10 +605,10 @@ export default function ExplorerPage() {
                     <MapPin className="h-4 w-4 text-[#10b981]" />
                     <h3 className="text-sm font-bold text-[#0f172a]">Location Result</h3>
                   </div>
-                  {isInferenceYear && (
+                  {pointResult.year_status === 'inference_only' && (
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-[#fffbeb] border border-[#fde68a] rounded text-xs text-[#92400e]">
                       <AlertTriangle className="h-3 w-3" />
-                      Inference-only year — no validated accuracy
+                      Inference-only period — no validated accuracy
                     </div>
                   )}
                 </div>
@@ -505,9 +623,9 @@ export default function ExplorerPage() {
 
                 {/* Year */}
                 <div className="p-4 space-y-2">
-                  <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider">Selected Year</h4>
+                  <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider">Analysis Period</h4>
                   <div className="flex items-center gap-2">
-                    <span className="text-xl font-bold text-[#0f172a]">{pointResult.year}</span>
+                    <span className="text-xl font-bold text-[#0f172a]">{pointResult.date_range}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       pointResult.year_status === 'validated_year'
                         ? 'bg-[#dcfce7] text-[#166534]'
@@ -598,6 +716,18 @@ export default function ExplorerPage() {
 
                 {/* Actions */}
                 <div className="p-4 flex flex-col gap-2">
+                  <Button className="w-full text-sm bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => setShowAI(true)}>
+                    <Sparkles className="h-4 w-4 mr-2" /> Analyze Result with AI
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleSaveArea}
+                    disabled={saveSuccess}
+                  >
+                    {saveSuccess ? '✓ Saved to My Areas' : 'Save to My Areas'}
+                  </Button>
+
                   <Button variant="outline" className="w-full text-sm" onClick={() => router.push(`/compare?lat=${pointResult.latitude}&lon=${pointResult.longitude}`)}>
                     <GitCompare className="h-4 w-4 mr-2" /> Compare Years
                   </Button>
@@ -605,6 +735,8 @@ export default function ExplorerPage() {
                     <ImageIcon className="h-4 w-4 mr-2" /> View Satellite Imagery
                   </Button>
                 </div>
+                
+
               </div>
             )}
 
@@ -616,10 +748,10 @@ export default function ExplorerPage() {
                     <Pentagon className="h-4 w-4 text-[#10b981]" />
                     <h3 className="text-sm font-bold text-[#0f172a]">Polygon Analysis</h3>
                   </div>
-                  {isInferenceYear && (
+                  {polygonResult.year_status === 'inference_only' && (
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-[#fffbeb] border border-[#fde68a] rounded text-xs text-[#92400e]">
                       <AlertTriangle className="h-3 w-3" />
-                      Inference-only year — no validated accuracy
+                      Inference-only period — no validated accuracy
                     </div>
                   )}
                 </div>
@@ -627,7 +759,7 @@ export default function ExplorerPage() {
                 <div className="p-4 space-y-2">
                   <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider">Analysis Info</h4>
                   <p className="text-sm text-[#334155]">
-                    Year: <span className="font-bold">{polygonResult.year}</span> · 
+                    Period: <span className="font-bold">{polygonResult.date_range}</span> · 
                     Samples: <span className="font-bold">{polygonResult.samples_analyzed}</span>
                   </p>
                 </div>
@@ -675,10 +807,13 @@ export default function ExplorerPage() {
 
                 {/* Actions */}
                 <div className="p-4 flex flex-col gap-2">
+                  <Button className="w-full text-sm bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => setShowAI(true)}>
+                    <Sparkles className="h-4 w-4 mr-2" /> Analyze Result with AI
+                  </Button>
                   <Button variant="outline" className="w-full text-sm" onClick={() => router.push(`/compare?polygon=${encodeURIComponent(JSON.stringify(selectedPolygon))}`)}>
                     <GitCompare className="h-4 w-4 mr-2" /> Compare Years
                   </Button>
-                  <Button variant="outline" className="w-full text-sm">
+                  <Button variant="outline" className="w-full text-sm" onClick={() => setLayerMode('satellite')}>
                     <ImageIcon className="h-4 w-4 mr-2" /> View Satellite Imagery
                   </Button>
                 </div>
@@ -687,6 +822,13 @@ export default function ExplorerPage() {
           </div>
         )}
       </div>
+
+      <AIAnalysisModal 
+        isOpen={showAI} 
+        onClose={() => setShowAI(false)} 
+        analysisResult={pointResult || polygonResult} 
+      />
+
     </div>
   );
 }

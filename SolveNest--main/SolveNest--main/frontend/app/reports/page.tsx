@@ -1,64 +1,82 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Download, FileText, Calendar, Filter, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { Download, FileText, Calendar, Filter, Trash2, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { areasService, HistoryItem } from '@/services/areas-service';
+import { areasService, SavedArea } from '@/services/areas-service';
 
-export default function ReportsPage() {
+function ReportsContent() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<SavedArea[]>([]);
 
   const loadReports = () => {
-    const items = areasService.getHistory();
-    const generatedReports = items.map(item => ({
-      id: item.id,
-      name: item.type === 'comparison' 
-        ? `${item.areaName.replace('Compare ', '')} Change Summary (${item.beforeDate?.substring(0,4)}-${item.afterDate?.substring(0,4)})`
-        : `${item.areaName} Land Cover Analysis`,
-      date: item.createdAt.substring(0, 10),
-      size: (Math.random() * 3 + 1).toFixed(1) + ' MB',
-      type: 'PDF'
-    }));
-    setReports(generatedReports);
+    let saved = areasService.getSavedAreas();
+    
+    // Filter if area ID is in URL
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const areaId = params.get('area');
+      if (areaId) {
+        saved = saved.filter(s => s.id === areaId);
+      }
+    }
+    
+    setReports(saved);
   };
 
   useEffect(() => {
     loadReports();
   }, []);
 
-  const handleDelete = (id: string) => {
-    areasService.deleteHistoryItem(id);
-    loadReports();
-  };
-
-  const handleDownload = (report: any, format: 'pdf' | 'csv') => {
-    const id = `${report.id}-${format}`;
+  const handleDownload = (area: SavedArea, format: 'pdf' | 'csv') => {
+    const id = `${area.id}-${format}`;
     setDownloadingId(id);
     
     setTimeout(() => {
       let content = "";
       let filename = "";
       let mimeType = "";
+      
+      const analysis = area.latestAnalysis;
+      const ndvi = analysis?.ndvi ?? 'N/A';
+      const ndwi = analysis?.ndwi ?? 'N/A';
+      const ndbi = analysis?.ndbi ?? 'N/A';
+      const pred = analysis?.predClass ?? 'Unknown';
+      const conf = analysis?.confidence ?? 'N/A';
+      const verif = analysis?.verification ?? 'Unknown';
+      const date = new Date(area.lastAnalyzedDate || area.createdAt).toLocaleDateString();
 
       if (format === 'csv') {
-        content = `Region,LandCover,Area_Hectares,Confidence\n${report.name.split(' ')[0]},Vegetation,145.2,0.92\n${report.name.split(' ')[0]},Built-up,82.1,0.88\n${report.name.split(' ')[0]},Water,12.4,0.95\n\n`;
-        content += `Sentinel-1/2 Spectral Features (Mean Values)\n`;
-        content += `B1,B2,B3,B4,B5,B6,B7,B8,B8A,B9,B11,B12,NDVI,EVI,SAVI,NDWI,MNDWI,NDBI,VV,VH,VV_VH_Ratio,VV_VH_Diff,RVI,elevation,slope,aspect\n`;
-        content += `0.11,0.08,0.12,0.09,0.14,0.25,0.29,0.31,0.32,0.10,0.20,0.15,0.55,0.48,0.36,-0.12,-0.20,-0.15,-10.5,-18.2,0.57,7.7,0.85,540,2.1,180.5`;
-        filename = `${report.name.replace(/\s+/g, '_')}_Data.csv`;
+        content = `Region,Latitude,Longitude,LandCover,Confidence,Verification,NDVI,NDWI,NDBI,AnalysisDate
+`;
+        content += `"${area.name}",${area.latitude},${area.longitude},"${pred}",${conf},"${verif}",${ndvi},${ndwi},${ndbi},${date}
+`;
+        filename = `${area.name.replace(/[^a-zA-Z0-9]/g, '_')}_Data.csv`;
         mimeType = "text/csv;charset=utf-8;";
       } else {
-        content = `SOLVENEST EARTH OBSERVATION REPORT\n=================================\n\nReport Name: ${report.name}\nDate Generated: ${report.date}\n\nThis is a generated summary report for the selected region.\n\n`;
-        content += `EXTRACTED 26-FEATURE VECTORS (Sentinel-1/2 + Terrain)\n`;
+        content = `SOLVENEST EARTH OBSERVATION REPORT\n`;
+        content += `=================================\n\n`;
+        content += `Location Name: ${area.name}\n`;
+        content += `Coordinates: ${area.latitude.toFixed(5)}, ${area.longitude.toFixed(5)}\n`;
+        content += `Analysis Date: ${date}\n\n`;
+        
+        content += `ANALYSIS RESULTS\n`;
         content += `---------------------------------------------------\n`;
-        content += `- Spectral Bands (S2): B1: 0.11, B2: 0.08, B3: 0.12, B4: 0.09, B5: 0.14, B6: 0.25, B7: 0.29, B8: 0.31, B8A: 0.32, B9: 0.10, B11: 0.20, B12: 0.15\n`;
-        content += `- Spectral Indices: NDVI: 0.55, EVI: 0.48, SAVI: 0.36, NDWI: -0.12, MNDWI: -0.20, NDBI: -0.15\n`;
-        content += `- SAR Backscatter (S1): VV: -10.5 dB, VH: -18.2 dB, VV/VH Ratio: 0.57, VV-VH Diff: 7.7 dB, RVI: 0.85\n`;
-        content += `- Terrain (SRTM): Elevation: 540m, Slope: 2.1°, Aspect: 180.5°\n\n`;
+        content += `Land Cover Classification: ${pred}\n`;
+        content += `Prediction Confidence: ${typeof conf === 'number' ? (conf * 100).toFixed(1) + '%' : conf}\n`;
+        content += `Verification Status: ${verif}\n\n`;
+        
+        content += `SPECTRAL INDICES\n`;
+        content += `---------------------------------------------------\n`;
+        content += `NDVI (Normalized Difference Vegetation Index): ${ndvi}\n`;
+        content += `NDWI (Normalized Difference Water Index): ${ndwi}\n`;
+        content += `NDBI (Normalized Difference Built-up Index): ${ndbi}\n\n`;
+        
+        content += `NOTE: Indices marked as N/A mean the required spectral bands were unavailable during analysis.\n\n`;
         content += `[End of Report]`;
-        filename = `${report.name.replace(/\s+/g, '_')}_Summary.txt`;
+        
+        filename = `${area.name.replace(/[^a-zA-Z0-9]/g, '_')}_Summary.txt`;
         mimeType = "text/plain;charset=utf-8;";
       }
 
@@ -73,7 +91,7 @@ export default function ReportsPage() {
       document.body.removeChild(link);
 
       setDownloadingId(null);
-    }, 800);
+    }, 500);
   };
 
   return (
@@ -81,66 +99,72 @@ export default function ReportsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-brand-neutral-200 pb-4">
         <div>
           <h2 className="text-2xl font-bold text-brand-neutral-900">Analysis Reports</h2>
-          <p className="text-sm text-brand-neutral-700 mt-1">Download generated scientific reports, datasets, and summaries.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" leftIcon={<Filter className="h-4 w-4" />}>Filter</Button>
-          <Button variant="primary" size="sm" leftIcon={<FileText className="h-4 w-4" />}>Generate New Report</Button>
+          <p className="text-sm text-brand-neutral-700 mt-1">Download scientifically verified reports and datasets.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {reports.map(report => (
-          <Card key={report.id} className="hover:border-brand-green-700 transition-colors">
+        {reports.length === 0 && (
+          <div className="text-center py-12 text-slate-500">
+            No reports found. Save an area in Map Explorer to generate a report.
+          </div>
+        )}
+        {reports.map(area => (
+          <Card key={area.id} className="hover:border-brand-primary-500 transition-colors">
             <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-brand-neutral-100 text-brand-neutral-700 rounded-brand-md">
+              <div className="flex items-start gap-3 w-full sm:w-auto">
+                <div className="p-2 bg-brand-primary-50 text-brand-primary-700 rounded-brand-md">
                   <FileText className="h-5 w-5" />
                 </div>
-                <div>
-                  <h4 className="font-bold text-brand-neutral-900 text-sm md:text-base">{report.name}</h4>
-                  <div className="flex items-center gap-3 text-xs text-brand-neutral-500 mt-1">
-                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {report.date}</span>
+                <div className="min-w-0">
+                  <h4 className="font-bold text-brand-neutral-900 text-sm md:text-base truncate" title={area.name}>
+                    {area.name} Report
+                  </h4>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-brand-neutral-500 mt-1">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" /> 
+                      {new Date(area.lastAnalyzedDate || area.createdAt).toLocaleDateString()}
+                    </span>
                     <span>•</span>
-                    <span>{report.type}</span>
-                    <span>•</span>
-                    <span>{report.size}</span>
+                    <span className="truncate">Lat: {area.latitude.toFixed(4)}, Lon: {area.longitude.toFixed(4)}</span>
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+              
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center shrink-0">
                 <Button 
                   variant="secondary" 
                   size="sm"
-                  onClick={() => handleDownload(report, 'csv')}
-                  disabled={downloadingId === `${report.id}-csv`}
+                  onClick={() => handleDownload(area, 'csv')}
+                  disabled={downloadingId === `${area.id}-csv`}
                   leftIcon={<Download className="h-4 w-4" />}
                   className="w-full sm:w-auto"
                 >
-                  {downloadingId === `${report.id}-csv` ? 'Downloading...' : 'Data (CSV)'}
+                  {downloadingId === `${area.id}-csv` ? 'Downloading...' : 'Data (CSV)'}
                 </Button>
                 <Button 
                   variant="primary" 
                   size="sm"
-                  onClick={() => handleDownload(report, 'pdf')}
-                  disabled={downloadingId === `${report.id}-pdf`}
+                  onClick={() => handleDownload(area, 'pdf')}
+                  disabled={downloadingId === `${area.id}-pdf`}
                   leftIcon={<Download className="h-4 w-4" />}
-                  className="w-full sm:w-auto bg-brand-green-700 text-white"
+                  className="w-full sm:w-auto"
                 >
-                  {downloadingId === `${report.id}-pdf` ? 'Downloading...' : 'Summary'}
+                  {downloadingId === `${area.id}-pdf` ? 'Downloading...' : 'Summary (TXT)'}
                 </Button>
-                <button
-                  onClick={() => handleDelete(report.id)}
-                  className="p-2 text-brand-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-brand-md transition-colors ml-2"
-                  title="Delete Report"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading reports...</div>}>
+      <ReportsContent />
+    </Suspense>
   );
 }

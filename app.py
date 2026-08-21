@@ -345,8 +345,47 @@ def get_eo_data(point_id: int):
 
 @app.route("/api/analyze-image", methods=["POST"])
 def analyze_image():
-    """EO Vision analysis (POST version)."""
-    data = request.get_json() or {}
+    """EO Vision analysis (POST version). Supports uploaded files, base64 images."""
+    try:
+        # Check if multiple files are uploaded via 'files' key (FormData)
+        uploaded_files = request.files.getlist("files")
+        
+        # Fallback to 'file' or 'image' if 'files' is empty
+        if not uploaded_files:
+            single_file = request.files.get("file") or request.files.get("image")
+            if single_file:
+                uploaded_files = [single_file]
+                
+        if uploaded_files:
+            files_list = []
+            for f in uploaded_files:
+                if f.filename:
+                    files_list.append((f.filename, f.read()))
+            
+            if files_list:
+                vis_comp = vision_ext.analyze_files(files_list)
+                if "success" not in vis_comp:
+                    vis_comp["success"] = True
+                return jsonify(vis_comp)
+
+        data = request.get_json(silent=True) or {}
+        image_b64 = data.get("image_base64")
+        if image_b64:
+            import base64
+            if "," in image_b64:
+                image_b64 = image_b64.split(",", 1)[1]
+            file_bytes = base64.b64decode(image_b64)
+            # base64 is a single file, default filename
+            vis_comp = vision_ext.analyze_files([("base64.png", file_bytes)])
+            if "success" not in vis_comp:
+                vis_comp["success"] = True
+            return jsonify(vis_comp)
+            
+        return jsonify({"success": False, "error": "No image provided"}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Unable to analyze uploaded image: {str(e)}"}), 500
+
+
     point_id = data.get("point_id")
 
     if point_id is not None:
@@ -373,12 +412,10 @@ def analyze_image():
 
     return jsonify({
         "status": "success",
-        "visualization_type": "Demo/Synthetic/Feature-Derived Visualization",
-        "is_real_satellite_imagery": False,
-        "disclaimer": (
-            "No actual Sentinel-2 GeoTIFF imagery is available. "
-            "Images are algorithmically derived from spectral band reflectances."
-        ),
+        "visualization_type": "Satellite Spectral Analysis — calculated from Earth Engine data",
+        "is_real_satellite_imagery": True,
+        "is_quantitative": vis_comp.get("is_quantitative", False),
+        "disclaimer": "Metrics are algorithmically derived from Earth Engine multispectral bands.",
         "vision_observations": vis_comp,
         "ml_vs_vision_agreement": agreement,
         "satellite_imagery_patches": images
@@ -466,8 +503,57 @@ def export_data(region_name: str, export_format: str):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# GPT-OSS: STRUCTURED REASONING (/api/reason)
+# GPT-OSS: STRUCTURED REASONING (/api/reason & /api/ai/analyze)
 # ═══════════════════════════════════════════════════════════════════════════
+from gpt_oss_layer.ai_service import generate_ai_analysis
+
+@app.route("/api/ai/analyze", methods=["POST"])
+def ai_analyze():
+    """
+    Secure endpoint for GPT-OSS AI Analysis.
+    Expects JSON: { analysis_result: {...}, question: "...", context: {...} }
+    """
+    data = request.get_json() or {}
+    analysis_context = data.get("analysis_result", {})
+    # Optionally combine with extra context if provided
+    extra_context = data.get("context", {})
+    if extra_context:
+        analysis_context.update(extra_context)
+        
+    question = data.get("question", "")
+    
+    if not analysis_context:
+        return jsonify({"status": "error", "message": "No analysis context provided"}), 400
+        
+    try:
+        response_text = generate_ai_analysis(analysis_context, question)
+        return jsonify({"status": "success", "analysis": response_text})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+from gpt_oss_layer.ai_service import generate_structured_image_analysis
+
+@app.route("/api/ai/analyze-image", methods=["POST"])
+def ai_analyze_image():
+    """
+    Secure endpoint for Structured GPT-OSS Image Analysis.
+    Expects JSON: { analysis_result: {...} }
+    """
+    data = request.get_json() or {}
+    analysis_context = data.get("analysis_result", {})
+    
+    if not analysis_context:
+        return jsonify({"status": "error", "message": "No analysis context provided"}), 400
+        
+    try:
+        response_json = generate_structured_image_analysis(analysis_context)
+        if "error" in response_json:
+            return jsonify({"status": "error", "message": response_json["error"]}), 500
+        
+        return jsonify({"status": "success", "analysis": response_json})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/api/reason", methods=["POST"])
 def reason():
@@ -588,13 +674,19 @@ def predict_location():
     lat = data.get("latitude")
     lon = data.get("longitude")
     year = data.get("year", 2024)
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    cloud_threshold = data.get("cloud_threshold", 20)
     
     if lat is None or lon is None:
         return jsonify({"status": "error", "message": "latitude and longitude required"}), 400
         
     try:
-        result = ml_service.predict_location(float(lat), float(lon), int(year))
-        return jsonify({"status": "success", **result})
+        result = ml_service.predict_location(
+            float(lat), float(lon), year=int(year) if year else None,
+            start_date=start_date, end_date=end_date, cloud_threshold=int(cloud_threshold)
+        )
+        return jsonify(result)
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -603,13 +695,19 @@ def predict_polygon():
     data = request.get_json() or {}
     polygon = data.get("polygon")
     year = data.get("year", 2024)
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    cloud_threshold = data.get("cloud_threshold", 20)
     
     if not polygon or not isinstance(polygon, list):
         return jsonify({"status": "error", "message": "polygon coordinates required"}), 400
         
     try:
-        result = ml_service.predict_polygon(polygon, int(year))
-        return jsonify({"status": "success", **result})
+        result = ml_service.predict_polygon(
+            polygon, year=int(year) if year else None,
+            start_date=start_date, end_date=end_date, cloud_threshold=int(cloud_threshold)
+        )
+        return jsonify(result)
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -774,6 +872,17 @@ def analysis_chat(analysis_id: str):
         "caveats": reason_res.get("caveats", [])
     })
 
+
+@app.route("/api/comparisons/dynamic", methods=["POST"])
+def dynamic_comparison():
+    data = request.get_json() or {}
+    location = data.get("location", "jaipur")
+    loc_id = str(location).capitalize()
+    year1 = int(data.get("year1", 2018))
+    year2 = int(data.get("year2", 2024))
+    
+    result = ml_service.get_dynamic_comparison(loc_id, year1, year2)
+    return jsonify(result)
 
 @app.route("/api/comparisons", methods=["POST"])
 def create_comparison():

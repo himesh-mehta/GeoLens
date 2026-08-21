@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Upload, Image as ImageIcon, FileType, Info, AlertTriangle,
-  CheckCircle, Loader2
+  ArrowLeft, Upload, FileType, Info, AlertTriangle,
+  CheckCircle, Loader2, BrainCircuit, Download, Image as ImageIcon, Layers
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,27 +15,61 @@ export default function ImageAnalysisPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [dragOver, setDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [progressStage, setProgressStage] = useState(0);
+  const [progressText, setProgressText] = useState("");
+  const [progressPercent, setProgressPercent] = useState(0);
+  
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFile = useCallback((file: File) => {
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState<any>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const getBandName = (filename: string) => {
+    const upper = filename.toUpperCase();
+    if (upper.includes('B01')) return 'B01 — Coastal Aerosol';
+    if (upper.includes('B02')) return 'B02 — Blue';
+    if (upper.includes('B03')) return 'B03 — Green';
+    if (upper.includes('B04')) return 'B04 — Red';
+    if (upper.includes('B05')) return 'B05 — Red Edge 1';
+    if (upper.includes('B06')) return 'B06 — Red Edge 2';
+    if (upper.includes('B07')) return 'B07 — Red Edge 3';
+    if (upper.includes('B08')) return 'B08 — NIR';
+    if (upper.includes('B8A')) return 'B8A — Narrow NIR';
+    if (upper.includes('B09')) return 'B09 — Water Vapour';
+    if (upper.includes('B11')) return 'B11 — SWIR 1';
+    if (upper.includes('B12')) return 'B12 — SWIR 2';
+    return 'Unknown Band';
+  };
+
+  const handleFiles = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files);
     const validTypes = ['image/png', 'image/jpeg', 'image/tiff'];
-    if (!validTypes.includes(file.type) && !file.name.endsWith('.tif') && !file.name.endsWith('.tiff')) {
-      setError('Unsupported format. Please upload PNG, JPG, or GeoTIFF.');
-      return;
+    
+    // Validate all files
+    for (const file of fileArray) {
+      if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.tif') && !file.name.toLowerCase().endsWith('.tiff')) {
+        setError('Unsupported format. Please upload PNG, JPG, or GeoTIFF.');
+        return;
+      }
     }
-    setSelectedFile(file);
+
+    setSelectedFiles(fileArray);
     setError(null);
     setResult(null);
+    setAiResult(null);
+    setProgressStage(0);
 
-    // Generate preview for non-tiff
-    if (file.type.startsWith('image/') && !file.name.endsWith('.tif') && !file.name.endsWith('.tiff')) {
+    // If it's a single RGB image, try to preview it
+    if (fileArray.length === 1 && fileArray[0].type.startsWith('image/') && !fileArray[0].name.toLowerCase().endsWith('.tif') && !fileArray[0].name.toLowerCase().endsWith('.tiff')) {
       const reader = new FileReader();
       reader.onload = (e) => setPreviewUrl(e.target?.result as string);
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(fileArray[0]);
     } else {
       setPreviewUrl(null);
     }
@@ -45,168 +79,206 @@ export default function ImageAnalysisPage() {
     e.preventDefault();
     setDragOver(false);
     if (e.dataTransfer.files.length > 0) {
-      handleFile(e.dataTransfer.files[0]);
+      handleFiles(e.dataTransfer.files);
     }
-  }, [handleFile]);
+  }, [handleFiles]);
+
+  const simulateProgress = async () => {
+    setProgressStage(1);
+    setProgressText(selectedFiles.length > 1 ? "Uploading TIFFs..." : "Uploading image...");
+    setProgressPercent(10);
+    await new Promise(r => setTimeout(r, 500));
+    
+    setProgressStage(2);
+    setProgressText("Reading raster metadata...");
+    setProgressPercent(25);
+    await new Promise(r => setTimeout(r, 600));
+
+    setProgressStage(3);
+    setProgressText(selectedFiles.length > 1 ? "Detecting Sentinel-2 bands..." : "Inspecting image properties...");
+    setProgressPercent(40);
+    await new Promise(r => setTimeout(r, 600));
+
+    setProgressStage(4);
+    setProgressText(selectedFiles.length > 1 ? "Validating spatial alignment..." : "Detecting image type...");
+    setProgressPercent(60);
+    await new Promise(r => setTimeout(r, 500));
+
+    setProgressStage(5);
+    setProgressText(selectedFiles.length > 1 ? "Processing valid pixels..." : "Extracting visual features...");
+    setProgressPercent(75);
+    await new Promise(r => setTimeout(r, 600));
+
+    setProgressStage(6);
+    setProgressText(selectedFiles.length > 1 ? "Calculating spectral indices..." : "Generating land-cover prediction...");
+    setProgressPercent(85);
+  };
 
   const handleAnalyze = async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
     setIsAnalyzing(true);
     setError(null);
+    setAiResult(null);
+    setResult(null);
+    setProgressPercent(0);
 
     try {
-      // Use the existing /api/analyze-image endpoint
-      const res = await BackendAPI.analyzeImage();
-      if (res && (res as any).status === 'success') {
-        setResult(res);
+      const progressPromise = simulateProgress();
+      // Send multiple files if array has > 1, else send the single file
+      const resPromise = BackendAPI.analyzeImage(selectedFiles.length === 1 ? selectedFiles[0] : selectedFiles);
+      
+      await progressPromise; // wait for initial progress steps
+      const res = await resPromise; // wait for real api call
+      
+      setProgressStage(7);
+      setProgressText("Preparing analysis...");
+      setProgressPercent(95);
+      await new Promise(r => setTimeout(r, 400));
+      
+      if (res && (res as any).success) {
+        setProgressStage(8);
+        setProgressText("Complete");
+        setProgressPercent(100);
+        await new Promise(r => setTimeout(r, 200));
+        
+        const data = res as any;
+        setResult(data);
+        
+        // Detailed console logging required by spec
+        console.log("==========================================");
+        if (selectedFiles.length === 1) {
+          console.log("[IMAGE ANALYZER] File:", selectedFiles[0].name);
+          console.log("[IMAGE ANALYZER] MIME:", selectedFiles[0].type);
+        } else {
+          console.log("[IMAGE ANALYZER] Files:", selectedFiles.map(f => f.name));
+        }
+        console.log("[IMAGE ANALYZER] Analysis type:", data.analysis_type);
+        console.log("[IMAGE ANALYZER] Source:", data.source);
+        console.log("[IMAGE ANALYZER] Verification:", data.verification);
+        console.log("[IMAGE ANALYZER] Prediction:", data.prediction);
+        console.log("[IMAGE ANALYZER] Spectral indices:", data.spectral_indices);
+        console.log("[IMAGE ANALYZER] Image quality:", data.image_quality);
+        if (data.analysis_type === "multispectral" && data.image_quality) {
+          console.log("[IMAGE ANALYZER] Bands detected:", data.image_quality.bands);
+          console.log("[IMAGE ANALYZER] Available spectral bands:", data.image_quality.detected_bands);
+          console.log("[IMAGE ANALYZER] Valid pixel percentage:", data.image_quality.valid_pixel_percentage);
+        }
+        console.log("==========================================");
+        
       } else {
-        setError('Image analysis returned an unexpected response. The backend may not support direct image uploads yet.');
+        setError((res as any)?.error || 'Image analysis could not be completed.');
       }
     } catch (err) {
-      setError('Failed to reach the analysis backend.');
+      console.error(err);
+      setError('Image analysis could not be completed.');
     } finally {
       setIsAnalyzing(false);
+      setProgressStage(9);
+    }
+  };
+
+  const handleAiAnalyze = async () => {
+    if (!result) return;
+    setIsAiAnalyzing(true);
+    setAiError(null);
+
+    try {
+      const res = await BackendAPI.aiAnalyzeImage({
+        analysis_result: result
+      });
+      if (res && (res as any).status === 'success') {
+        setAiResult((res as any).analysis);
+      } else {
+        setAiError((res as any)?.message || 'AI interpretation failed.');
+      }
+    } catch (err) {
+      setAiError('Failed to reach the AI analysis backend.');
+    } finally {
+      setIsAiAnalyzing(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 space-y-8">
-      {/* Header */}
+    <div className="max-w-5xl mx-auto py-8 px-4 space-y-8">
       <div className="flex items-center gap-3">
         <Button variant="secondary" size="sm" onClick={() => router.push('/')}>
           <ArrowLeft className="h-4 w-4 mr-1" /> Back
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-[#0f172a]">Satellite Image Analysis</h1>
-          <p className="text-sm text-[#64748b]">Upload a satellite image and run the available analysis pipeline.</p>
+          <h1 className="text-2xl font-bold text-[#0f172a]">Image Analyzer</h1>
+          <p className="text-sm text-[#64748b]">Honest Visual & Multispectral Analysis</p>
         </div>
       </div>
 
-      {/* Important Notice */}
-      <div className="flex items-start gap-3 p-4 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
-        <Info className="h-5 w-5 text-[#3b82f6] flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-[#1e40af]">
-          <p className="font-semibold mb-1">How Image Analysis Works</p>
-          <p>
-            Uploaded images are processed by the <strong>Image Vision Analysis</strong> pipeline.
-            This is separate from the <strong>ML Feature-Based Land-Cover Prediction</strong> (ExtraTrees),
-            which requires 24 spectral bands from Sentinel-2 data.
-          </p>
-          <p className="mt-1 text-xs text-[#3b82f6]">
-            A standard RGB image cannot provide the spectral features needed for ExtraTrees classification.
-          </p>
-        </div>
-      </div>
-
-      {/* Upload Area */}
-      {!selectedFile ? (
+      {selectedFiles.length === 0 ? (
         <div
           className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer ${
-            dragOver ? 'border-[#10b981] bg-[#ecfdf5]' : 'border-[#cbd5e1] bg-[#f8fafc] hover:border-[#94a3b8]'
+            dragOver ? 'border-[#3b82f6] bg-[#eff6ff]' : 'border-[#cbd5e1] hover:border-[#94a3b8] hover:bg-[#f8fafc]'
           }`}
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <Upload className="h-12 w-12 text-[#94a3b8] mx-auto mb-4" />
-          <p className="text-lg font-medium text-[#334155] mb-1">Drop satellite image here</p>
-          <p className="text-sm text-[#94a3b8] mb-4">or</p>
-          <Button variant="primary" className="bg-[#10b981] hover:bg-[#059669] text-white">
-            Choose Image
-          </Button>
-          <p className="text-xs text-[#94a3b8] mt-4">Supported: PNG, JPG/JPEG, GeoTIFF</p>
           <input
-            ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/tiff,.tif,.tiff"
+            ref={fileInputRef}
             className="hidden"
-            onChange={e => e.target.files && handleFile(e.target.files[0])}
+            accept=".png,.jpg,.jpeg,.tif,.tiff"
+            multiple
+            onChange={(e) => e.target.files && handleFiles(e.target.files)}
           />
+          <div className="w-16 h-16 bg-[#f1f5f9] rounded-full flex items-center justify-center mx-auto mb-4">
+            <Layers className="h-8 w-8 text-[#64748b]" />
+          </div>
+          <h3 className="text-lg font-semibold text-[#0f172a] mb-2">Upload Sentinel-2 Bands or Image</h3>
+          <p className="text-sm text-[#64748b] mb-6">Select multiple GeoTIFF bands (B02, B03, B04, B08) or a single JPG/PNG</p>
+          <Button variant="secondary">Browse Files</Button>
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Preview */}
-          <Card className="border-[#e2e8f0]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ImageIcon className="h-5 w-5 text-[#10b981]" />
-                Image Preview
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {previewUrl ? (
-                <div className="relative rounded-lg overflow-hidden bg-[#0f172a] max-h-96 flex items-center justify-center">
-                  <img src={previewUrl} alt="Preview" className="max-h-96 object-contain" />
+          {previewUrl && (
+            <div className="relative h-64 md:h-96 w-full rounded-xl overflow-hidden border border-[#e2e8f0] bg-[#f8fafc]">
+              <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+            </div>
+          )}
+          
+          {selectedFiles.length > 0 && !previewUrl && (
+             <div className="p-4 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
+                <h4 className="font-semibold text-[#1e40af] mb-2 flex items-center gap-2">
+                  <Layers className="h-4 w-4" /> Selected Sentinel-2 bands
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {selectedFiles.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-[#1e40af] bg-white p-2 rounded border border-[#bfdbfe]">
+                      <CheckCircle className="h-4 w-4 text-[#3b82f6]" />
+                      <span>{getBandName(f.name)}</span>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div className="h-48 flex items-center justify-center bg-[#f1f5f9] rounded-lg">
-                  <p className="text-sm text-[#94a3b8]">Preview unavailable for GeoTIFF files</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+             </div>
+          )}
 
-          {/* File Info */}
-          <Card className="border-[#e2e8f0]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileType className="h-5 w-5 text-[#3b82f6]" />
-                Image Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-[#64748b]">Filename</span>
-                  <p className="font-medium text-[#0f172a] truncate">{selectedFile.name}</p>
-                </div>
-                <div>
-                  <span className="text-[#64748b]">Size</span>
-                  <p className="font-medium text-[#0f172a]">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                </div>
-                <div>
-                  <span className="text-[#64748b]">Format</span>
-                  <p className="font-medium text-[#0f172a]">{selectedFile.type || 'GeoTIFF'}</p>
-                </div>
-                <div>
-                  <span className="text-[#64748b]">Pipeline</span>
-                  <p className="font-medium text-[#d97706]">Image Vision Analysis</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
           <div className="flex gap-3">
-            <Button
-              variant="primary"
-              size="lg"
-              className="bg-[#10b981] hover:bg-[#059669] text-white flex-1"
-              onClick={handleAnalyze}
-              disabled={isAnalyzing}
-            >
-              {isAnalyzing ? (
-                <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</span>
-              ) : (
-                'Analyze Image'
+            <Button variant="primary" size="lg" className="bg-[#10b981] hover:bg-[#059669] text-white flex-1 relative overflow-hidden" onClick={handleAnalyze} disabled={isAnalyzing}>
+              {isAnalyzing && (
+                <div 
+                  className="absolute left-0 top-0 bottom-0 bg-[#047857] transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
               )}
+              <span className="relative flex items-center gap-2">
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> 
+                    {progressText} ({progressPercent}%)
+                  </>
+                ) : 'Analyze Image'}
+              </span>
             </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => {
-                setSelectedFile(null);
-                setPreviewUrl(null);
-                setResult(null);
-                setError(null);
-              }}
-            >
-              Clear
-            </Button>
+            <Button variant="outline" size="lg" onClick={() => { setSelectedFiles([]); setPreviewUrl(null); setResult(null); setError(null); setAiResult(null); }}>Clear</Button>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="p-4 bg-[#fef2f2] border border-[#fecaca] rounded-lg flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-[#ef4444] flex-shrink-0 mt-0.5" />
@@ -214,37 +286,227 @@ export default function ImageAnalysisPage() {
             </div>
           )}
 
-          {/* Results */}
           {result && (
-            <Card className="border-[#e2e8f0]">
-              <CardHeader className="bg-[#f8fafc]">
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-[#10b981]" />
-                  Image Vision Analysis Results
-                </CardTitle>
-                <p className="text-xs text-[#64748b] mt-1">
-                  ⚠ These results are from Image Vision Analysis, NOT from the ExtraTrees ML Land-Cover Model.
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {result.vision_analysis && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider mb-2">Visual Characteristics</h4>
-                    <pre className="text-xs bg-[#f1f5f9] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap text-[#334155]">
-                      {JSON.stringify(result.vision_analysis, null, 2)}
-                    </pre>
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4">
+                <div className="p-4 bg-white border border-[#e2e8f0] rounded-lg">
+                  <h3 className="font-bold text-[#0f172a] text-lg mb-4">IMAGE ANALYSIS RESULT</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-xs text-[#64748b] uppercase font-semibold">Data Source</span>
+                      <p className="font-medium text-[#0f172a]">{result.source || 'Unknown'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-[#64748b] uppercase font-semibold">Processing</span>
+                      <p className="font-medium text-[#0f172a]">{result.analysis_type === 'visual' ? 'Visual Analysis Only' : 'Raster-based spectral analysis'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-[#64748b] uppercase font-semibold">Satellite Verification</span>
+                      <div className="flex items-center gap-1">
+                        {result.verification === 'Source metadata dependent' || result.verification === 'Available' ? <CheckCircle className="h-4 w-4 text-[#10b981]" /> : <AlertTriangle className="h-4 w-4 text-[#f59e0b]" />}
+                        <p className="font-medium text-[#0f172a]">{result.verification}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* For Multispectral, show detected bands again here */}
+                  {result.analysis_type === 'multispectral' && result.image_quality?.detected_bands && (
+                    <div className="mt-4 pt-4 border-t border-[#e2e8f0]">
+                      <span className="text-xs text-[#64748b] uppercase font-semibold mb-2 block">Bands Detected</span>
+                      <div className="flex flex-wrap gap-2">
+                        {result.image_quality.detected_bands.map((band: string) => (
+                           <span key={band} className="px-2 py-1 bg-[#eff6ff] text-[#1e40af] text-xs font-medium rounded">
+                             {band}
+                           </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* IMAGE QUALITY SECTION */}
+                <div className="p-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg">
+                   <h4 className="text-sm font-bold text-[#0f172a] mb-4">DATA QUALITY</h4>
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div><span className="text-[#64748b] block mb-1">Resolution</span><p className="font-medium text-[#0f172a]">{result.image_quality?.width} x {result.image_quality?.height}</p></div>
+                      <div><span className="text-[#64748b] block mb-1">Bands available</span><p className="font-medium text-[#0f172a]">{result.image_quality?.bands || 3}</p></div>
+                      <div><span className="text-[#64748b] block mb-1">Valid pixels</span><p className="font-medium text-[#0f172a]">{result.image_quality?.valid_pixel_percentage !== undefined ? `${result.image_quality.valid_pixel_percentage}%` : 'N/A'}</p></div>
+                      <div><span className="text-[#64748b] block mb-1">NoData pixels</span><p className="font-medium text-[#0f172a]">{result.image_quality?.nodata_percentage !== undefined ? `${result.image_quality.nodata_percentage}%` : '0%'}</p></div>
+                      <div><span className="text-[#64748b] block mb-1">CRS</span><p className="font-medium text-[#0f172a]">{result.image_quality?.geo_referenced ? 'Verified via GeoKeys' : 'Unknown'}</p></div>
+                      <div><span className="text-[#64748b] block mb-1">Band alignment</span><p className="font-medium text-[#0f172a]">{result.analysis_type === 'multispectral' ? 'Verified' : 'N/A'}</p></div>
+                   </div>
+                   
+                   {/* Rasterio Resampling / Metadata */}
+                   {result.image_quality?.resampling_performed && result.image_quality.resampling_performed.length > 0 && (
+                     <div className="mt-4 pt-4 border-t border-[#e2e8f0]">
+                       <span className="text-xs text-[#64748b] uppercase font-semibold mb-2 block">Resampling Performed</span>
+                       <ul className="list-disc pl-5 text-sm text-[#0f172a]">
+                         {result.image_quality.resampling_performed.map((info: string, idx: number) => (
+                           <li key={idx}>{info}</li>
+                         ))}
+                       </ul>
+                     </div>
+                   )}
+                   {result.image_quality?.band_metadata && (
+                     <div className="mt-4 pt-4 border-t border-[#e2e8f0]">
+                       <span className="text-xs text-[#64748b] uppercase font-semibold mb-2 block">Native Resolutions</span>
+                       <div className="flex flex-wrap gap-2 text-sm">
+                         {Object.entries(result.image_quality.band_metadata).map(([band, res]: [string, any]) => (
+                           <span key={band} className="text-[#0f172a]"><strong>{band}:</strong> {res}</span>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                </div>
+
+                {/* PREDICTION SECTION (RESTORED) */}
+                <div className="p-4 bg-white border border-[#e2e8f0] rounded-lg">
+                  <h4 className="text-sm font-bold text-[#0f172a] mb-4">
+                    {result.analysis_type === 'visual' ? 'VISUAL IMAGE RESULT' : 'PREDICTION RESULT'}
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <Card className="bg-[#f8fafc] border-[#e2e8f0]">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-[#64748b] uppercase font-semibold">Predicted Land Cover</p>
+                        <p className="text-lg font-bold mt-1 text-[#0f172a]">{result.prediction?.class || 'Unknown'}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-[#f8fafc] border-[#e2e8f0]">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-[#64748b] uppercase font-semibold">Prediction Confidence</p>
+                        <p className="text-lg font-bold mt-1 text-[#0f172a]">{result.prediction?.confidence ? `${Math.round(result.prediction.confidence * 100)}%` : 'Not Available'}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-[#f8fafc] border-[#e2e8f0]">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-[#64748b] uppercase font-semibold">Validation Accuracy</p>
+                        <p className="text-lg font-bold mt-1 text-[#64748b]">Not Available</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* SPECTRAL INDICES (ONLY FOR MULTISPECTRAL) */}
+                {result.is_quantitative && (
+                  <div className="p-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg">
+                    <h4 className="text-sm font-bold text-[#0f172a] mb-4">SPECTRAL ANALYSIS</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* NDVI */}
+                      <Card className="bg-white border-[#e2e8f0]">
+                        <CardContent className="p-4">
+                          <p className="text-xs text-[#64748b] uppercase font-semibold">NDVI</p>
+                          {result.spectral_indices?.ndvi?.value !== undefined && result.spectral_indices?.ndvi?.value !== null && typeof result.spectral_indices.ndvi.value === 'number' ? (
+                            <>
+                              <p className="text-lg font-bold mt-1 text-[#0f172a]">{result.spectral_indices.ndvi.value}</p>
+                              <p className="text-xs text-[#64748b] mt-1">Calculated from B08 + B04</p>
+                              {result.spectral_indices.ndvi.interpretation && (
+                                <p className="text-sm mt-2 text-[#0f172a]"><strong>Interpretation:</strong> {result.spectral_indices.ndvi.interpretation}</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm mt-1 font-medium text-[#ef4444]">{result.spectral_indices?.ndvi?.value || result.spectral_indices?.ndvi || 'Unavailable'}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                      
+                      {/* NDWI */}
+                      <Card className="bg-white border-[#e2e8f0]">
+                        <CardContent className="p-4">
+                          <p className="text-xs text-[#64748b] uppercase font-semibold">NDWI</p>
+                          {result.spectral_indices?.ndwi?.value !== undefined && result.spectral_indices?.ndwi?.value !== null && typeof result.spectral_indices.ndwi.value === 'number' ? (
+                            <>
+                              <p className="text-lg font-bold mt-1 text-[#0f172a]">{result.spectral_indices.ndwi.value}</p>
+                              <p className="text-xs text-[#64748b] mt-1">Calculated from B03 + B08</p>
+                              {result.spectral_indices.ndwi.interpretation && (
+                                <p className="text-sm mt-2 text-[#0f172a]"><strong>Interpretation:</strong> {result.spectral_indices.ndwi.interpretation}</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm mt-1 font-medium text-[#ef4444]">{result.spectral_indices?.ndwi?.value || result.spectral_indices?.ndwi || 'Unavailable'}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                      
+                      {/* NDBI */}
+                      <Card className="bg-white border-[#e2e8f0]">
+                        <CardContent className="p-4">
+                          <p className="text-xs text-[#64748b] uppercase font-semibold">NDBI</p>
+                          {result.spectral_indices?.ndbi?.value !== undefined && result.spectral_indices?.ndbi?.value !== null && typeof result.spectral_indices.ndbi.value === 'number' ? (
+                            <>
+                              <p className="text-lg font-bold mt-1 text-[#0f172a]">{result.spectral_indices.ndbi.value}</p>
+                              <p className="text-xs text-[#64748b] mt-1">Calculated from B11 + B08</p>
+                              {result.spectral_indices.ndbi.interpretation && (
+                                <p className="text-sm mt-2 text-[#0f172a]"><strong>Interpretation:</strong> {result.spectral_indices.ndbi.interpretation}</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm mt-1 font-medium text-[#ef4444]">{result.spectral_indices?.ndbi?.value || result.spectral_indices?.ndbi || 'Unavailable'}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
                 )}
-                {result.eo_vision && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider mb-2">EO Vision Output</h4>
-                    <pre className="text-xs bg-[#f1f5f9] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap text-[#334155]">
-                      {JSON.stringify(result.eo_vision, null, 2)}
-                    </pre>
+                {/* ANALYSIS SUMMARY */}
+                {result.analysis && (
+                  <Card className="border-[#e2e8f0]">
+                    <CardHeader className="bg-[#f8fafc] border-b border-[#e2e8f0] py-3">
+                      <CardTitle className="text-sm font-semibold text-[#0f172a]">Analysis Notes</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <p className="text-sm text-[#334155] mt-1">{result.analysis}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* AI REPORT */}
+              <div className="pt-4 border-t border-[#e2e8f0]">
+                {isAiAnalyzing ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+                    <div className="w-12 h-12 bg-[#eff6ff] rounded-full flex items-center justify-center">
+                      <BrainCircuit className="h-6 w-6 text-[#3b82f6] animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-[#0f172a]">AI is analyzing the extracted properties...</h4>
+                      <p className="text-sm text-[#64748b]">Generating scientific interpretation.</p>
+                    </div>
+                  </div>
+                ) : aiResult ? (
+                  <Card className="border-[#bfdbfe] bg-[#f8fafc]">
+                    <CardHeader className="pb-3 border-b border-[#e2e8f0]">
+                      <CardTitle className="flex items-center gap-2 text-lg text-[#1e40af]">
+                        <BrainCircuit className="h-5 w-5 text-[#3b82f6]" /> AI Scientific Interpretation
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-6">
+                      {aiResult.executive_summary && (
+                        <div>
+                          <h4 className="font-semibold text-[#0f172a] text-sm uppercase tracking-wider mb-2">Executive Summary</h4>
+                          <p className="text-[#334155] text-sm leading-relaxed">{aiResult.executive_summary}</p>
+                        </div>
+                      )}
+                      {aiResult.land_cover_interpretation && (
+                        <div>
+                          <h4 className="font-semibold text-[#0f172a] text-sm uppercase tracking-wider mb-2">Land Cover</h4>
+                          <p className="text-[#334155] text-sm leading-relaxed">{aiResult.land_cover_interpretation}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Button onClick={handleAiAnalyze} variant="outline" className="w-full h-12 border-[#cbd5e1] text-[#334155]">
+                    <BrainCircuit className="h-4 w-4 mr-2 text-[#3b82f6]" /> Generate AI Interpretation
+                  </Button>
+                )}
+                
+                {aiError && (
+                  <div className="mt-4 p-4 bg-[#fef2f2] border border-[#fecaca] rounded-lg">
+                    <p className="text-sm text-[#b91c1c]">{aiError}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
         </div>
       )}

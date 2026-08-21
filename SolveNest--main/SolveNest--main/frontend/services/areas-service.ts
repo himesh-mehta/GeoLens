@@ -9,11 +9,20 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface SavedArea {
-  id: string;           // matches eoService locationId ("nashik", "pune", etc.)
+  id: string;           
   name: string;
-  state?: string;       // e.g. "Maharashtra"
-  lastChecked?: string; // human-readable date label, e.g. "May 2025"
-  recentFinding?: string; // e.g. "Vegetation decreased"
+  latitude: number;
+  longitude: number;
+  createdAt: string;
+  lastAnalyzedDate: string | null;
+  latestAnalysis: {
+    verification: string;
+    predClass: string;
+    confidence: number | null;
+    ndvi: string | number | null;
+    ndwi: string | number | null;
+    ndbi: string | number | null;
+  } | null;
 }
 
 export interface HistoryItem {
@@ -35,55 +44,11 @@ const AREAS_KEY = 'solvenest_saved_areas';
 const HISTORY_KEY = 'solvenest_history';
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
-// Pre-loaded so demo pages are never blank during SIH presentation.
+// Clean seed data matching the new schema
 
-const SEED_AREAS: SavedArea[] = [
-  {
-    id: 'nashik',
-    name: 'Nashik',
-    state: 'Maharashtra',
-    lastChecked: 'May 2025',
-    recentFinding: 'Vegetation decreased',
-  },
-  {
-    id: 'pune',
-    name: 'Pune',
-    state: 'Maharashtra',
-    lastChecked: 'May 2025',
-    recentFinding: 'Built-up areas increased',
-  },
-];
+const SEED_AREAS: SavedArea[] = [];
 
-const SEED_HISTORY: HistoryItem[] = [
-  {
-    id: 'hist-001',
-    areaId: 'nashik',
-    areaName: 'Nashik',
-    type: 'analysis',
-    date: 'May 2025',
-    status: 'completed',
-    createdAt: '2025-05-15T10:00:00Z',
-  },
-  {
-    id: 'hist-002',
-    areaId: 'nashik',
-    areaName: 'Nashik',
-    type: 'comparison',
-    beforeDate: 'May 2022',
-    afterDate: 'May 2025',
-    status: 'completed',
-    createdAt: '2025-05-15T11:30:00Z',
-  },
-  {
-    id: 'hist-003',
-    areaId: 'pune',
-    areaName: 'Pune',
-    type: 'analysis',
-    date: 'May 2025',
-    status: 'completed',
-    createdAt: '2025-05-16T09:15:00Z',
-  },
-];
+const SEED_HISTORY: HistoryItem[] = [];
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
@@ -92,11 +57,12 @@ function readAreas(): SavedArea[] {
   try {
     const raw = localStorage.getItem(AREAS_KEY);
     if (raw === null) {
-      // First run — seed and persist
       localStorage.setItem(AREAS_KEY, JSON.stringify(SEED_AREAS));
       return [...SEED_AREAS];
     }
-    return JSON.parse(raw) as SavedArea[];
+    const parsed = JSON.parse(raw) as SavedArea[];
+    // Filter out old schema items that don't have latitude/longitude
+    return parsed.filter(a => a.latitude !== undefined && a.longitude !== undefined);
   } catch {
     return [...SEED_AREAS];
   }
@@ -145,7 +111,12 @@ export const areasService = {
    * Return all saved areas, most-recently-checked first.
    */
   getSavedAreas(): SavedArea[] {
-    return readAreas();
+    const areas = readAreas();
+    return areas.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    });
   },
 
   /**
@@ -248,11 +219,36 @@ export const areasService = {
   },
 
   /**
-   * Delete a history item by ID.
+   * Update the status of an existing history item.
    */
-  deleteHistoryItem(id: string): void {
+  updateHistoryStatus(
+    id: string,
+    status: 'completed' | 'failed'
+  ): void {
     const all = readHistory();
-    const filtered = all.filter(h => h.id !== id);
+    const idx = all.findIndex(h => h.id === id);
+    if (idx >= 0) {
+      all[idx].status = status;
+      writeHistory(all);
+    }
+  },
+
+  /**
+   * Remove a history item by ID.
+   */
+  removeHistoryItem(id: string): void {
+    const filtered = readHistory().filter(h => h.id !== id);
     writeHistory(filtered);
   },
+  deleteHistoryItem(id: string): void {
+    const filtered = readHistory().filter(h => h.id !== id);
+    writeHistory(filtered);
+  },
+
+  /**
+   * Clear all history (mostly for user 'clear all' actions).
+   */
+  clearHistory(): void {
+    writeHistory([]);
+  }
 };

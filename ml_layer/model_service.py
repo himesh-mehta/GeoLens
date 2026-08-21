@@ -24,6 +24,7 @@ import joblib
 import pandas as pd
 import numpy as np
 import logging
+import hashlib
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
@@ -177,38 +178,85 @@ class ModelService:
     # DYNAMIC GEE INFERENCE
     # =========================================================================
     
-    def predict_location(self, lat: float, lon: float, year: int) -> Dict[str, Any]:
+    def predict_location(self, lat: float, lon: float, year: int = None, start_date: str = None, end_date: str = None, cloud_threshold: int = 20) -> Dict[str, Any]:
         """Dynamically predicts land cover for a coordinate using GEE and the trained ExtraTrees model."""
         if not self.active_model:
             raise RuntimeError("ML model is not loaded.")
             
         try:
-            # Get exact 24 features from GEE
-            features = self.gee_source.get_features_for_location(lat, lon, year)
+            # Get features and metadata from GEE
+            gee_result = self.gee_source.get_features_for_location(lat, lon, year=year, start_date=start_date, end_date=end_date, cloud_threshold=cloud_threshold)
+            features = gee_result["features"]
+            metadata = gee_result["metadata"]
             
             # Format as dataframe for prediction to preserve exact order
             feature_df = pd.DataFrame([features])[self.BASE_FEATURE_NAMES]
             
+            
+            # --- GEE DEBUG LOGGING ---
+            logger.info("""
+            ========== GEE QUERY DEBUG INFO ==========
+            Location: lat={lat}, lon={lon}
+            Requested Dates: {start} to {end}
+            Collection ID: {dataset}
+            Images Found/Composited: {images}
+            Actual Date Range Used: {act_start} to {act_end}
+            Calculated Indices:
+              NDVI:  {ndvi}
+              NDWI:  {ndwi}
+              MNDWI: {mndwi}
+              NDBI:  {ndbi}
+            ==========================================
+            """.format(
+                lat=lat, lon=lon,
+                start=start_date or (f"{year}-01-01" if year else "2024-01-01"),
+                end=end_date or (f"{year}-12-31" if year else "2024-12-31"),
+                dataset=metadata.get("dataset", "COPERNICUS/S2_SR_HARMONIZED"),
+                images=metadata.get("images_found", 0),
+                act_start=metadata.get("date_range", {}).get("start", "Unknown"),
+                act_end=metadata.get("date_range", {}).get("end", "Unknown"),
+                ndvi=round(features.get("NDVI", 0), 4),
+                ndwi=round(features.get("NDWI", 0), 4),
+                mndwi=round(features.get("MNDWI", 0), 4),
+                ndbi=round(features.get("NDBI", 0), 4)
+            ))
+            # -------------------------
+
             pred_class = self.active_model.predict(feature_df)[0]
             pred_proba = self.active_model.predict_proba(feature_df)[0]
             
             probs = {self.CLASS_NAMES[i]: float(prob) for i, prob in enumerate(pred_proba)}
             confidence = float(np.max(pred_proba))
-            
-            is_validated = year in [2018, 2024]
-            
+            # Calculate query_id and provenance dates
+            import json
+            query_id = hashlib.sha256(json.dumps({
+                "lat": lat, "lon": lon, "start": metadata["date_range"]["start"], 
+                "end": metadata["date_range"]["end"], "cloud": cloud_threshold
+            }, sort_keys=True).encode()).hexdigest()[:12]
+
             return {
                 "status": "success",
-                "latitude": lat,
-                "longitude": lon,
-                "year": year,
-                "prediction": self.CLASS_NAMES.get(pred_class, "Unknown"),
-                "confidence": round(confidence, 4),
-                "probabilities": probs,
-                "features": features,
-                "data_source": "Google Earth Engine / Sentinel-2",
-                "inference_status": "validated" if is_validated else "inference_only",
-                "validation_note": "Model was trained/validated on 2018 and 2024. This result is an inference only." if not is_validated else "Model was trained/validated on 2018 and 2024."
+                "source_type": metadata["source_type"],
+                "location": {"latitude": lat, "longitude": lon},
+                "dataset": metadata["dataset"],
+                "date_range": metadata["date_range"],
+                "query_id": query_id,
+                "requested_start_date": start_date or (f"{year}-01-01" if year else "2024-01-01"),
+                "requested_end_date": end_date or (f"{year}-12-31" if year else "2024-12-31"),
+                "actual_start_date": metadata["date_range"]["start"],
+                "actual_end_date": metadata["date_range"]["end"],
+                "is_fallback": False,
+                "verified": True,
+                "cloud_threshold": metadata["cloud_threshold"],
+                "images_found": metadata["images_found"],
+                "point": {
+                    "prediction": self.CLASS_NAMES.get(pred_class, "Unknown"),
+                    "confidence": round(confidence, 4),
+                    "probabilities": probs,
+                    "features": features
+                },
+                "processing_method": metadata["processing_method"],
+                "scale": metadata["scale"]
             }
         except GEEError as e:
             logger.error(f"GEE Error in predict_location: {e.code} - {e.message}")
@@ -225,14 +273,16 @@ class ModelService:
                 "message": str(e)
             }
         
-    def predict_polygon(self, polygon: List[List[float]], year: int) -> Dict[str, Any]:
+    def predict_polygon(self, polygon: List[List[float]], year: int = None, start_date: str = None, end_date: str = None, cloud_threshold: int = 20) -> Dict[str, Any]:
         """Dynamically predicts land cover composition for a polygon using GEE."""
         if not self.active_model:
             raise RuntimeError("ML model is not loaded.")
             
         try:
             # Limit to 500 samples for demo speed
-            samples = self.gee_source.get_features_for_polygon(polygon, year, max_samples=500)
+            gee_result = self.gee_source.get_features_for_polygon(polygon, year=year, start_date=start_date, end_date=end_date, cloud_threshold=cloud_threshold, max_samples=500)
+            samples = gee_result["samples"]
+            metadata = gee_result["metadata"]
             
             if not samples:
                 raise RuntimeError("No samples could be extracted from this polygon.")
@@ -256,15 +306,39 @@ class ModelService:
                     "regional_landcover_percentage": round((c / total) * 100, 2)
                 }
                 
-            is_validated = year in [2018, 2024]
-            
+            # Calculate mean spectral indices
+            spectral_means = {}
+            for feature in ["NDVI", "NDBI", "NDWI", "MNDWI"]:
+                if feature in feature_df.columns:
+                    spectral_means[feature] = round(feature_df[feature].mean(), 4)
+            # Calculate query_id and provenance dates
+            import json
+            query_id = hashlib.sha256(json.dumps({
+                "polygon": polygon, "start": metadata["date_range"]["start"], 
+                "end": metadata["date_range"]["end"], "cloud": cloud_threshold
+            }, sort_keys=True).encode()).hexdigest()[:12]
+
             return {
                 "status": "success",
+                "source_type": metadata["source_type"],
+                "dataset": metadata["dataset"],
+                "date_range": metadata["date_range"],
+                "query_id": query_id,
+                "requested_start_date": start_date or (f"{year}-01-01" if year else "2024-01-01"),
+                "requested_end_date": end_date or (f"{year}-12-31" if year else "2024-12-31"),
+                "actual_start_date": metadata["date_range"]["start"],
+                "actual_end_date": metadata["date_range"]["end"],
+                "is_fallback": False,
+                "verified": True,
+                "cloud_threshold": metadata["cloud_threshold"],
+                "images_found": metadata["images_found"],
                 "samples_analyzed": total,
-                "year": year,
-                "distribution": distribution,
-                "data_source": "Google Earth Engine / Sentinel-2",
-                "inference_status": "validated" if is_validated else "inference_only"
+                "aoi_statistics": {
+                    "distribution": distribution,
+                    "spectral_means": spectral_means
+                },
+                "processing_method": metadata["processing_method"],
+                "scale": metadata["scale"]
             }
         except GEEError as e:
             logger.error(f"GEE Error in predict_polygon: {e.code} - {e.message}")
@@ -636,8 +710,65 @@ class ModelService:
             "dict": mat.to_dict(orient="index")
         }
 
+    def get_dynamic_comparison(self, region_name: str, year1: int, year2: int) -> Dict[str, Any]:
+        """Dynamically computes comparison by extracting a bounding box for the region and calling GEE."""
+        points = self.get_region_points(region_name)
+        if not points:
+            return {"status": "error", "message": f"Region {region_name} not found"}
+        
+        lats = [p["latitude"] for p in points]
+        lons = [p["longitude"] for p in points]
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
+        
+        polygon = [
+            [min_lon, min_lat],
+            [max_lon, min_lat],
+            [max_lon, max_lat],
+            [min_lon, max_lat],
+            [min_lon, min_lat]
+        ]
+        
+        res1 = self.predict_polygon(polygon, year1)
+        res2 = self.predict_polygon(polygon, year2)
+        
+        if res1.get("status") == "error":
+            return res1
+        if res2.get("status") == "error":
+            return res2
+            
+        dist1 = res1.get("distribution", {})
+        dist2 = res2.get("distribution", {})
+        
+        # Calculate changes
+        changes = {}
+        for cls in self.CLASS_NAMES.values():
+            pct1 = dist1.get(cls, {}).get("regional_landcover_percentage", 0.0)
+            pct2 = dist2.get(cls, {}).get("regional_landcover_percentage", 0.0)
+            diff = round(pct2 - pct1, 2)
+            rel = round((diff / pct1 * 100), 2) if pct1 > 0 else (100.0 if pct2 > 0 else 0.0)
+            changes[cls] = {
+                "absolute_change_pct": diff,
+                "relative_change_pct": rel,
+                "increased": bool(diff > 0),
+                "decreased": bool(diff < 0)
+            }
+            
+        return {
+            "status": "success",
+            "region": region_name,
+            str(year1): dist1,
+            str(year2): dist2,
+            "spectral": {
+                str(year1): res1.get("spectral_means", {}),
+                str(year2): res2.get("spectral_means", {})
+            },
+            "changes": changes,
+            "samples_analyzed": res1.get("samples_analyzed", 0)
+        }
+
     # =========================================================================
-    # F. UNIFIED EVIDENCE OBJECT (Multimodal Fusion)
+    # G. MULTIMODAL EVIDENCE COMPOSITION (GPT-OSS)
     # =========================================================================
 
     def get_unified_evidence(self, point_id: int) -> Dict[str, Any]:

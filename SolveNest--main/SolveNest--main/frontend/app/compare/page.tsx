@@ -1,837 +1,503 @@
-"use client";
-
+'use client';
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Columns, Calendar, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { LoadingState } from '@/components/ui/loading-state';
-import { ErrorState } from '@/components/ui/error-state';
-import { eoService, Location, ImageryDate } from '@/services/eo-service';
-import { comparisonService, ComparisonResult, ChangeFinding } from '@/services/comparison-service';
-import { FindingsList } from '@/components/analysis/findings-list';
-import { Finding } from '@/services/analysis-service';
-import { AIAssistant } from '@/components/analysis/ai-assistant';
-import { TechDetailsPanel, TechDetailGroup } from '@/components/analysis/tech-details-panel';
-import { areasService } from '@/services/areas-service';
-import { useTranslation } from '@/lib/i18n';
-
+import { ArrowLeft, Loader2, AlertCircle, Search } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { BackendAPI } from '@/lib/api-client';
+import { eoService, Location } from '@/services/eo-service';
+import { LoadingState } from '@/components/ui/loading-state';
+import dynamic from 'next/dynamic';
+const DynamicMap = dynamic(() => import('@/components/map/DynamicMap'), { ssr: false });
 
-const AVAILABLE_YEARS = [
-  { year: 2018, status: 'validated' },
-  { year: 2019, status: 'unseen_inference' },
-  { year: 2020, status: 'unseen_inference' },
-  { year: 2021, status: 'unseen_inference' },
-  { year: 2022, status: 'unseen_inference' },
-  { year: 2023, status: 'unseen_inference' },
-  { year: 2024, status: 'validated' },
-];
+const SPECTRAL_KEYS = ['NDVI', 'NDWI', 'MNDWI', 'NDBI', 'BSI', 'SAVI', 'EVI', 'NBR', 'UI', 'NDMI', 'GRVI'];
+const LAND_COVERS = ['Vegetation', 'Built-up', 'Agriculture', 'Water', 'Barren'];
+const ALL_METRICS = [...SPECTRAL_KEYS, ...LAND_COVERS];
 
-function DynamicCompareContent({ lat, lon, polygonStr }: { lat?: string, lon?: string, polygonStr?: string }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [selectedYears, setSelectedYears] = useState<number[]>([2018, 2024]);
-  const [results, setResults] = useState<any[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [hasRunInitial, setHasRunInitial] = useState(false);
-
-  const handleRunComparison = async () => {
-    setIsAnalyzing(true);
-    setError(null);
-    setResults([]);
-    try {
-      const newResults = [];
-      for (const year of selectedYears.sort()) {
-        let res;
-        if (lat && lon) {
-          res = await BackendAPI.predictLocation(parseFloat(lat), parseFloat(lon), year);
-        } else if (polygonStr) {
-          const poly = JSON.parse(polygonStr);
-          // ensure polygon is properly closed and flipped if needed, same as explorer
-          const geoCoords = poly.map((c: any) => [c[1], c[0]]);
-          if (geoCoords.length > 0 && (geoCoords[0][0] !== geoCoords[geoCoords.length-1][0] || geoCoords[0][1] !== geoCoords[geoCoords.length-1][1])) {
-             geoCoords.push(geoCoords[0]);
-          }
-          res = await BackendAPI.predictPolygon(geoCoords, year);
-        }
-        if (res && res.status !== 'error') {
-          newResults.push(res);
-        }
-      }
-      setResults(newResults);
-      if (newResults.length >= 2) {
-        areasService.addHistoryItem({
-          areaId: lat && lon ? `custom-${lat}-${lon}` : `polygon-${Date.now()}`,
-          areaName: lat && lon ? `Compare Point: ${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}` : `Compare Polygon Area`,
-          type: 'comparison',
-          beforeDate: String(selectedYears[0]),
-          afterDate: String(selectedYears[selectedYears.length - 1]),
-          status: 'completed',
-        });
-      }
-    } catch (err: any) {
-      setError(err.message || 'Comparison failed');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!hasRunInitial && searchParams.get('autorun') === 'true') {
-      setHasRunInitial(true);
-      
-      const beforeStr = searchParams.get('before');
-      const afterStr = searchParams.get('after');
-      if (beforeStr && afterStr) {
-        setSelectedYears([parseInt(beforeStr), parseInt(afterStr)]);
-      }
-      
-      // We must wait for state to update or just run it with the explicit years
-      const yearsToRun = beforeStr && afterStr ? [parseInt(beforeStr), parseInt(afterStr)] : selectedYears;
-      
-      setIsAnalyzing(true);
-      setError(null);
-      setResults([]);
-      
-      const runAuto = async () => {
-        try {
-          const newResults = [];
-          for (const year of yearsToRun.sort()) {
-            let res;
-            if (lat && lon) {
-              res = await BackendAPI.predictLocation(parseFloat(lat), parseFloat(lon), year);
-            } else if (polygonStr) {
-              const poly = JSON.parse(polygonStr);
-              const geoCoords = poly.map((c: any) => [c[1], c[0]]);
-              if (geoCoords.length > 0 && (geoCoords[0][0] !== geoCoords[geoCoords.length-1][0] || geoCoords[0][1] !== geoCoords[geoCoords.length-1][1])) {
-                 geoCoords.push(geoCoords[0]);
-              }
-              res = await BackendAPI.predictPolygon(geoCoords, year);
-            }
-            if (res && res.status !== 'error') {
-              newResults.push(res);
-            }
-          }
-          setResults(newResults);
-        } catch (err: any) {
-          setError(err.message || 'Comparison failed');
-        } finally {
-          setIsAnalyzing(false);
-        }
-      };
-      
-      runAuto();
-    }
-  }, [hasRunInitial, searchParams, lat, lon, polygonStr]);
-
-  const toggleYear = (y: number) => {
-    if (selectedYears.includes(y)) {
-      if (selectedYears.length > 2) {
-        setSelectedYears(selectedYears.filter(year => year !== y));
-      }
-    } else {
-      setSelectedYears([...selectedYears, y]);
-    }
-  };
-
-  return (
-    <div className="max-w-6xl mx-auto space-y-6 py-8">
-      <div className="flex items-center gap-4 border-b border-brand-neutral-200 pb-4">
-        <Button variant="secondary" size="sm" onClick={() => router.push('/explorer')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Explorer
-        </Button>
-        <h2 className="text-2xl font-bold text-brand-neutral-900">Multi-Year Dynamic Comparison</h2>
-      </div>
-
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <div>
-            <h3 className="text-sm font-bold uppercase text-brand-neutral-700 tracking-wider mb-3">Select Years to Compare (Min 2)</h3>
-            <div className="flex flex-wrap gap-2">
-              {AVAILABLE_YEARS.map(y => (
-                <button
-                  key={y.year}
-                  onClick={() => toggleYear(y.year)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                    selectedYears.includes(y.year)
-                      ? 'bg-brand-green-700 text-white border-brand-green-700'
-                      : 'bg-white text-brand-neutral-700 border-brand-neutral-300 hover:bg-brand-neutral-50'
-                  }`}
-                >
-                  {y.year} {y.status === 'validated' && '★'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Button onClick={handleRunComparison} disabled={isAnalyzing || selectedYears.length < 2} className="bg-brand-green-700 text-white">
-            {isAnalyzing ? 'Analyzing...' : 'Run Comparison'}
-          </Button>
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-        </CardContent>
-      </Card>
-
-      {results.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {results.map((res, i) => {
-            const isVal = res.year_status === 'validated_year';
-            return (
-              <Card key={i} className="border-brand-neutral-200">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xl font-bold">{res.year}</span>
-                    <Badge variant={isVal ? 'success' : 'warning'}>
-                      {isVal ? 'Validated' : 'Inference Only'}
-                    </Badge>
-                  </div>
-                  {res.prediction && (
-                    <div>
-                      <h4 className="text-xs text-brand-neutral-500 uppercase">Predicted Class</h4>
-                      <p className="text-lg font-bold">{res.prediction}</p>
-                      <p className="text-sm text-brand-neutral-500">Confidence: {(res.confidence * 100).toFixed(1)}%</p>
-                    </div>
-                  )}
-                  {res.distribution && (
-                    <div>
-                      <h4 className="text-xs text-brand-neutral-500 uppercase mb-2">Class Distribution</h4>
-                      {Object.entries(res.distribution).map(([cls, data]: any) => (
-                        <div key={cls} className="flex justify-between text-sm mb-1">
-                          <span>{cls}</span>
-                          <span className="font-bold">{data.regional_landcover_percentage}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+function parseDate(d: string) {
+  const parts = d.split('/');
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return d;
 }
 
-function CompareContent() {
+function getVal(r: any, key: string): number | null {
+  if (!r) return null;
+  // Spectral Indices
+  if (r.aoi_statistics?.spectral_means && key in r.aoi_statistics.spectral_means) return r.aoi_statistics.spectral_means[key];
+  if (r.spectral_means && key in r.spectral_means) return r.spectral_means[key];
+  if (r.point?.features && key in r.point.features) return r.point.features[key];
+  if (r.features && key in r.features) return r.features[key];
+
+  // Land Cover Probabilities
+  const dist = r.aoi_statistics?.distribution || r.distribution;
+  if (dist && dist[key]) return dist[key].regional_landcover_percentage;
+
+  const probs = r.point?.probabilities || r.probabilities;
+  if (probs && key in probs) return probs[key] * 100;
+  
+  if (probs) {
+    const match = Object.keys(probs).find(k => k.toLowerCase() === key.toLowerCase());
+    if (match) return probs[match] * 100;
+  }
+  return null;
+}
+
+function ComparePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const areaId = searchParams.get('area');
-  const lat = searchParams.get('lat');
-  const lon = searchParams.get('lon');
+  const latParam = searchParams.get('lat');
+  const lonParam = searchParams.get('lon');
   const polygonStr = searchParams.get('polygon');
 
-  if (lat && lon || polygonStr) {
-    return <DynamicCompareContent lat={lat || undefined} lon={lon || undefined} polygonStr={polygonStr || undefined} />;
-  }
+  const [locationName, setLocationName] = useState<string>('Custom Location');
+  const [lat, setLat] = useState<number | null>(null);
+  const [lon, setLon] = useState<number | null>(null);
 
-  if (areaId && areaId.startsWith('custom-')) {
-    const parts = areaId.split('-');
-    if (parts.length >= 3) {
-      return <DynamicCompareContent lat={parts[1]} lon={parts[2]} />;
-    }
-  }
-
-  const { t } = useTranslation();
-
-  // Core Data States
-  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
-  const [location, setLocation] = useState<Location | null>(null);
-  const [dates, setDates] = useState<ImageryDate[]>([]);
-  
-  // Date Picker selections
-  const [beforeDateId, setBeforeDateId] = useState<string>('may-2022');
-  const [afterDateId, setAfterDateId] = useState<string>('may-2025');
-
-  // Mode and Comparison States
-  const [compareMode, setCompareMode] = useState<'side-by-side' | 'swipe'>('side-by-side');
-  const [compareState, setCompareState] = useState<'setup' | 'progress' | 'results' | 'error'>('setup');
-  const [compareStep, setCompareStep] = useState(0);
-  const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
-  const [selectedChange, setSelectedChange] = useState<ChangeFinding | null>(null);
-  const [imgZoom, setImgZoom] = useState(1);
-  const [swipePosition, setSwipePosition] = useState(50);
-
-  // Image URLs resolved from service
-  const [beforeImageUrl, setBeforeImageUrl] = useState<string | null>(null);
-  const [afterImageUrl, setAfterImageUrl] = useState<string | null>(null);
-
-  // Load location and available dates list
+  const [locations, setLocations] = useState<Location[]>([]);
   useEffect(() => {
-    if (!areaId) {
-      setIsLoadingLocation(false);
-      return;
-    }
+    eoService.getAllLocations().then(setLocations);
+  }, []);
 
-    const initCompare = async () => {
-      try {
-        const loc = await eoService.getLocationById(areaId);
-        if (!loc) {
-          setLocation(null);
-          setIsLoadingLocation(false);
-          return;
-        }
-
-        setLocation(loc);
-
-        const dateOptions = await eoService.getAvailableDates(areaId);
-        setDates(dateOptions);
-
-        const available = dateOptions.filter(d => d.isAvailable);
-        if (available.length >= 2) {
-          setBeforeDateId(available[0].id);
-          setAfterDateId(available[1].id);
-        }
-      } catch (err) {
-        console.error("Failed to load compare context", err);
-      } finally {
-        setIsLoadingLocation(false);
-      }
-    };
-
-    initCompare();
-  }, [areaId]);
-
-  // Execute comparison whenever location or dates selection changes
   useEffect(() => {
-    if (!location || !beforeDateId || !afterDateId) return;
-
-    const executeComparison = async () => {
-      setCompareState('progress');
-      setCompareStep(0);
-      setSelectedChange(null);
-
-      try {
-        const beforeUrl = await eoService.getImagery(location.id, beforeDateId);
-        const afterUrl = await eoService.getImagery(location.id, afterDateId);
-        setBeforeImageUrl(beforeUrl);
-        setAfterImageUrl(afterUrl);
-
-        // Run mock comparison service logic
-        const result = await comparisonService.runComparison(
-          location.id,
-          beforeDateId,
-          afterDateId,
-          (stepIndex) => setCompareStep(stepIndex)
-        );
-        
-        setComparisonResult(result);
-        setCompareState('results');
-
-        // Phase 6: record comparison history
-        const beforeLabel = dates.find(d => d.id === beforeDateId)?.label ?? beforeDateId;
-        const afterLabel = dates.find(d => d.id === afterDateId)?.label ?? afterDateId;
-        areasService.addHistoryItem({
-          areaId: location.id,
-          areaName: location.name,
-          type: 'comparison',
-          beforeDate: beforeLabel,
-          afterDate: afterLabel,
-          status: 'completed',
-        });
-      } catch (err) {
-        console.error("Comparison failed", err);
-        setCompareState('error');
+    async function initLoc() {
+      if (latParam && lonParam) {
+        setLat(parseFloat(latParam));
+        setLon(parseFloat(lonParam));
+        setLocationName(`Point: ${parseFloat(latParam).toFixed(4)}, ${parseFloat(lonParam).toFixed(4)}`);
+      } else if (areaId) {
+        if (areaId.startsWith('custom-')) {
+          const parts = areaId.split('-');
+          setLat(parseFloat(parts[1]));
+          setLon(parseFloat(parts[2]));
+          setLocationName(`Point: ${parseFloat(parts[1]).toFixed(4)}, ${parseFloat(parts[2]).toFixed(4)}`);
+        } else {
+          const loc = await eoService.getLocationById(areaId);
+          if (loc) {
+            setLocationName(loc.name);
+            if (loc.coordinates) {
+              const parts = loc.coordinates.split(',').map(s => s.trim());
+              setLat(parseFloat(parts[0]));
+              setLon(parseFloat(parts[1]));
+            }
+          }
+        }
+      } else if (polygonStr) {
+        setLocationName('Custom Polygon AOI');
       }
-    };
-
-    executeComparison();
-  }, [location, beforeDateId, afterDateId]);
-
-  // Handle Select Finding by ID from contextual assistant evidence click
-  const handleSelectFindingById = (findingId: string) => {
-    if (!comparisonResult) return;
-    const match = comparisonResult.changes.find(c => c.id === findingId);
-    if (match) {
-      setSelectedChange(match);
     }
-  };
+    initLoc();
+  }, [areaId, latParam, lonParam, polygonStr]);
 
-  if (isLoadingLocation) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <LoadingState 
-          message={t('compare.loadingComparison')} 
-          description={t('compare.loadingDesc')} 
-          size="lg"
-        />
-      </div>
-    );
-  }
+  const [p1Start, setP1Start] = useState('01/01/2018');
+  const [p1End, setP1End] = useState('31/12/2018');
+  const [p2Start, setP2Start] = useState('01/01/2024');
+  const [p2End, setP2End] = useState('31/12/2024');
+  const [cloudThresh, setCloudThresh] = useState(20);
 
-  // Empty state: No area selected
-  if (!areaId || !location) {
-    return (
-      <div className="max-w-md mx-auto py-8">
-        <ErrorState
-          title={t('compare.noArea')}
-          message={t('compare.noAreaDesc')}
-          onRetry={() => router.push('/select-area')}
-          retryText={t('compare.selectArea')}
-        />
-      </div>
-    );
-  }
+  const [p1Data, setP1Data] = useState<any>(null);
+  const [p2Data, setP2Data] = useState<any>(null);
 
-  // Empty state: Less than 2 observation dates available
-  const availableDates = dates.filter(d => d.isAvailable);
-  if (availableDates.length < 2) {
-    return (
-      <div className="max-w-md mx-auto py-8">
-        <ErrorState
-          title={t('compare.notEnoughImages')}
-          message={t('compare.notEnoughImagesDesc')}
-          onRetry={() => router.push('/select-area')}
-          retryText={t('selectArea.changeArea')}
-        />
-      </div>
-    );
-  }
+  const [loading1, setLoading1] = useState(false);
+  const [loading2, setLoading2] = useState(false);
 
-  // Helper colors
-  const getHighlightStrokeColor = (category: string) => {
-    switch (category) {
-      case 'vegetation': return '#16a34a'; // Green
-      case 'built-up': return '#7c3aed';  // Purple
-      case 'water': return '#0284c7';     // Blue
-      default: return '#cbd5e1';
-    }
-  };
+  const [error1, setError1] = useState<string | null>(null);
+  const [error2, setError2] = useState<string | null>(null);
 
-  const getHighlightFillColor = (category: string) => {
-    switch (category) {
-      case 'vegetation': return 'rgba(22, 163, 74, 0.06)';
-      case 'built-up': return 'rgba(124, 88, 237, 0.06)';
-      case 'water': return 'rgba(2, 132, 199, 0.06)';
-      default: return 'transparent';
-    }
-  };
+  const [showCompare, setShowCompare] = useState(false);
 
-  // Convert ChangeFinding items to Finding compatible objects for FindingsList component
-  const changeFindingsAsFindings: Finding[] = (comparisonResult?.changes || []).map(c => ({
-    id: c.id,
-    category: c.category,
-    title: c.title,
-    statusLabel: c.statusLabel,
-    status: c.status,
-    subtitle: c.subtitle,
-    description: c.description,
-    highlight: c.highlight
-  }));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{lat: string, lon: string, display_name: string}[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const getTechDetailsGroups = (): TechDetailGroup[] => {
-    const tech = comparisonResult?.technicalDetails;
-    return [
-      {
-        heading: t('techPanel.eoData'),
-        fields: [
-          { label: t('techPanel.sensor'), value: tech?.sensor },
-          { label: t('techPanel.resolution'), value: tech?.resolution },
-          { label: t('techPanel.source'), value: tech?.source },
-        ]
-      },
-      {
-        heading: t('techPanel.location'),
-        fields: [
-          { label: t('techPanel.area'), value: `${location.name}, ${location.region}` },
-          { label: t('techPanel.coordinates'), value: tech?.coordinates },
-        ]
-      },
-      {
-        heading: t('techPanel.changeAnalysis'),
-        fields: [
-          { label: t('techPanel.beforeDate'), value: dates.find(d => d.id === beforeDateId)?.label || beforeDateId },
-          { label: t('techPanel.afterDate'), value: dates.find(d => d.id === afterDateId)?.label || afterDateId },
-          { label: t('techPanel.pipeline'), value: tech?.processing },
-        ]
+  const fetchPeriod = async (num: 1 | 2) => {
+    const isP1 = num === 1;
+    isP1 ? setLoading1(true) : setLoading2(true);
+    isP1 ? setError1(null) : setError2(null);
+    isP1 ? setP1Data(null) : setP2Data(null);
+    setShowCompare(false);
+
+    try {
+      const s = parseDate(isP1 ? p1Start : p2Start);
+      const e = parseDate(isP1 ? p1End : p2End);
+
+      console.log(`[COMPARE PAGE] PERIOD ${num} REQUEST`);
+      console.log(`LAT: ${lat}, LON: ${lon}, START: ${s}, END: ${e}, CLOUD: ${cloudThresh}`);
+
+      let res;
+      if (lat !== null && lon !== null) {
+        res = await BackendAPI.predictLocation(lat, lon, undefined as any, s, e, cloudThresh);
+      } else if (polygonStr) {
+        const poly = JSON.parse(polygonStr);
+        const geoCoords = poly.map((c: any) => [c[1], c[0]]);
+        if (geoCoords.length > 0 && (geoCoords[0][0] !== geoCoords[geoCoords.length - 1][0] || geoCoords[0][1] !== geoCoords[geoCoords.length - 1][1])) {
+          geoCoords.push(geoCoords[0]);
+        }
+        res = await BackendAPI.predictPolygon(geoCoords, undefined as any, s, e, cloudThresh);
+      } else {
+        throw new Error("No location coordinates or polygon found.");
       }
-    ];
+
+      console.log(`[COMPARE PAGE] PERIOD ${num} RESPONSE`, res);
+
+      if (!res || res.status === 'error') {
+        throw new Error(res?.message || "GEE data unavailable for this period");
+      }
+
+      isP1 ? setP1Data(res) : setP2Data(res);
+    } catch (err: any) {
+      isP1 ? setError1(err.message || 'Error fetching GEE data') : setError2(err.message || 'Error fetching GEE data');
+    } finally {
+      isP1 ? setLoading1(false) : setLoading2(false);
+    }
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 py-2 md:py-4">
-      {/* Top Location Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-neutral-200 pb-4">
-        <div className="flex items-center gap-3">
-          <span className="text-xs uppercase font-bold text-brand-neutral-700 tracking-wider">Location:</span>
-          <h3 className="text-lg md:text-xl font-bold text-brand-neutral-900">
-            {location.name}, {location.region}
-          </h3>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Comparison View Mode Pills */}
-          <div className="flex items-center gap-2 bg-brand-neutral-100 p-1 rounded-brand-md self-start sm:self-auto">
-            <button
-              onClick={() => setCompareMode('side-by-side')}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                compareMode === 'side-by-side'
-                  ? 'bg-white text-brand-neutral-900 shadow-brand-sm'
-                  : 'text-brand-neutral-700 hover:text-brand-neutral-900'
-              }`}
-            >
-              {t('compare.sideBySide')}
-            </button>
-            <button
-              onClick={() => setCompareMode('swipe')}
-              className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                compareMode === 'swipe'
-                  ? 'bg-white text-brand-neutral-900 shadow-brand-sm'
-                  : 'text-brand-neutral-700 hover:text-brand-neutral-900'
-              }`}
-            >
-              {t('compare.swipe')}
-            </button>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => router.push(`/viewer?area=${location.id}`)}
-            leftIcon={<ArrowLeft className="h-4 w-4" />}
-          >
-            {t('compare.backToViewer')}
-          </Button>
-        </div>
+    <div className="max-w-6xl mx-auto space-y-6 py-8 px-4">
+      {/* HEADER */}
+      <div className="flex items-center gap-4 border-b border-brand-neutral-200 pb-4">
+        <Button variant="secondary" size="sm" onClick={() => router.push('/explorer')}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+        </Button>
+        <h2 className="text-2xl font-bold text-brand-neutral-900">GEE Data Comparison: {locationName}</h2>
       </div>
 
-      {/* Date Pickers Controls */}
+      {/* LOCATION INPUTS */}
       <Card>
-        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Earlier Date selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-brand-neutral-700 uppercase tracking-wider">{t('compare.beforeDate')}:</span>
-              <select
-                value={beforeDateId}
-                onChange={(e) => setBeforeDateId(e.target.value)}
-                className="border border-brand-neutral-200 bg-white rounded-brand-md px-3 py-1.5 text-xs md:text-sm font-semibold text-brand-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-green-700 cursor-pointer"
-              >
-                {availableDates.map((d) => (
-                  <option key={d.id} value={d.id} disabled={d.id === afterDateId}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <CardContent className="p-6">
+          <h3 className="text-lg font-bold text-brand-neutral-800 mb-4">Analysis Location</h3>
+          
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-brand-neutral-600 block mb-1">Quick Select (Predefined Areas)</label>
+            <select 
+              className="w-full text-sm border rounded p-2 focus:ring-1 focus:ring-brand-green-700 outline-none bg-slate-50"
+              onChange={(e) => {
+                const loc = locations.find(l => l.id === e.target.value);
+                if (loc && loc.coordinates) {
+                  const parts = loc.coordinates.split(',').map(s => s.trim());
+                  setLat(parseFloat(parts[0]));
+                  setLon(parseFloat(parts[1]));
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>-- Select a predefined region --</option>
+              {locations.slice(0, 5).map(l => (
+                <option key={l.id} value={l.id}>{l.name} ({l.region})</option>
+              ))}
+            </select>
+          </div>
 
-            <span className="text-brand-neutral-700 font-bold text-sm hidden sm:inline">→</span>
-
-            {/* Later Date selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-brand-neutral-700 uppercase tracking-wider">{t('compare.afterDate')}:</span>
-              <select
-                value={afterDateId}
-                onChange={(e) => setAfterDateId(e.target.value)}
-                className="border border-brand-neutral-200 bg-white rounded-brand-md px-3 py-1.5 text-xs md:text-sm font-semibold text-brand-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-green-700 cursor-pointer"
-              >
-                {availableDates.map((d) => (
-                  <option key={d.id} value={d.id} disabled={d.id === beforeDateId}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
+          <div className="mb-4 relative">
+            <label className="text-xs font-semibold text-brand-neutral-600 block mb-1">Search Global Location (Geocoding)</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-neutral-400" />
+              <input
+                type="text"
+                placeholder="Type a city or address and press Enter..."
+                value={searchQuery}
+                onChange={e => {
+                  setSearchQuery(e.target.value);
+                  if (!e.target.value) setSearchResults([]);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchQuery) {
+                    setIsSearching(true);
+                    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`)
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data && data.length > 0) {
+                          setSearchResults(data.slice(0, 5));
+                        } else {
+                          setSearchResults([]);
+                          alert('Location not found.');
+                        }
+                      })
+                      .catch(err => {
+                        setSearchResults([]);
+                        alert('Search failed.');
+                      })
+                      .finally(() => setIsSearching(false));
+                  }
+                }}
+                className="w-full pl-10 pr-4 py-2 text-sm border rounded focus:ring-1 focus:ring-brand-green-700 outline-none bg-white"
+              />
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="w-3 h-3 border-2 border-brand-green-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+              {searchResults.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border rounded shadow-lg overflow-hidden">
+                  {searchResults.map((res, i) => (
+                    <button
+                      key={i}
+                      title={res.display_name}
+                      className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 border-b last:border-0 truncate"
+                      onClick={() => {
+                        const l = parseFloat(res.lat);
+                        const ln = parseFloat(res.lon);
+                        setLat(l);
+                        setLon(ln);
+                        setSearchResults([]);
+                        setSearchQuery(res.display_name.split(',')[0]);
+                      }}
+                    >
+                      {res.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          <Badge variant="info">
-            Comparing 3-year gap
-          </Badge>
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-brand-neutral-600 block mb-1">Latitude (e.g. 18.5214)</label>
+                <input type="number" value={lat || ''} onChange={e => setLat(parseFloat(e.target.value))} className="w-full text-sm border rounded p-2 focus:ring-1 focus:ring-brand-green-700 outline-none" placeholder="Enter Latitude..." />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-brand-neutral-600 block mb-1">Longitude (e.g. 73.8545)</label>
+                <input type="number" value={lon || ''} onChange={e => setLon(parseFloat(e.target.value))} className="w-full text-sm border rounded p-2 focus:ring-1 focus:ring-brand-green-700 outline-none" placeholder="Enter Longitude..." />
+              </div>
+            </div>
+            
+            <div className="h-[300px] w-full border rounded-md overflow-hidden relative z-0">
+              <DynamicMap 
+                drawMode="point" 
+                onPointSelected={(l, ln) => { setLat(l); setLon(ln); }} 
+                selectedPoint={lat !== null && lon !== null ? [lat, lon] : null}
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Main Content Area */}
-      {compareState === 'progress' ? (
-        <div className="py-12">
-          <LoadingState
-            message={t('compare.loadingComparison')}
-            description={t('compare.loadingDesc')}
-            size="lg"
-          />
-        </div>
-      ) : (
-        // Main 3-Column Grid Layout (Responsive Stacking on mobile)
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          
-          {/* CENTER PANEL: Comparison display and findings - Takes 3 columns */}
-          <div className="lg:col-span-3 space-y-6">
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
-            {compareMode === 'side-by-side' ? (
-              // Side-by-Side Dual Frame Display
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Frame 1: Before Image */}
-                <Card className="overflow-hidden border border-brand-neutral-200">
-                  <div className="bg-brand-neutral-100 border-b border-brand-neutral-200 px-3 py-2 flex items-center justify-between">
-                    <span className="text-xs font-bold text-brand-neutral-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {t('compare.before')}: {dates.find(d => d.id === beforeDateId)?.label}
-                    </span>
-                  </div>
-                  <div className="w-full h-[250px] md:h-[380px] bg-brand-neutral-50 relative flex items-center justify-center overflow-hidden">
-                    {beforeImageUrl ? (
-                      <div className="w-full h-full relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={beforeImageUrl}
-                          alt="Earlier Observation"
-                          className="object-cover w-full h-full"
-                          draggable={false}
-                        />
-                        {/* Integrity Disclaimer Badge */}
-                        <div className="absolute top-2 left-2 z-10">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/90 text-white shadow-xs">
-                            Demo / Feature-Derived
-                          </span>
-                        </div>
-                        {/* Vector bounding box overlay */}
-                        {selectedChange && selectedChange.highlight && (
-                          <div className="absolute inset-0 pointer-events-none">
-                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                              <rect
-                                x={selectedChange.highlight.x}
-                                y={selectedChange.highlight.y}
-                                width={selectedChange.highlight.w}
-                                height={selectedChange.highlight.h}
-                                fill={getHighlightFillColor(selectedChange.category)}
-                                stroke={getHighlightStrokeColor(selectedChange.category)}
-                                strokeWidth="2"
-                                strokeDasharray="4,4"
-                              />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-brand-neutral-700">{t('common.loading')}</span>
-                    )}
-                  </div>
-                </Card>
-
-                {/* Frame 2: After Image */}
-                <Card className="overflow-hidden border border-brand-neutral-200">
-                  <div className="bg-brand-neutral-100 border-b border-brand-neutral-200 px-3 py-2 flex items-center justify-between">
-                    <span className="text-xs font-bold text-brand-neutral-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {t('compare.after')}: {dates.find(d => d.id === afterDateId)?.label}
-                    </span>
-                  </div>
-                  <div className="w-full h-[250px] md:h-[380px] bg-brand-neutral-50 relative flex items-center justify-center overflow-hidden">
-                    {afterImageUrl ? (
-                      <div className="w-full h-full relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={afterImageUrl}
-                          alt="Recent Observation"
-                          className="object-cover w-full h-full"
-                          draggable={false}
-                        />
-                        {/* Integrity Disclaimer Badge */}
-                        <div className="absolute top-2 left-2 z-10">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/90 text-white shadow-xs">
-                            Demo / Feature-Derived
-                          </span>
-                        </div>
-                        {/* Vector bounding box overlay */}
-                        {selectedChange && selectedChange.highlight && (
-                          <div className="absolute inset-0 pointer-events-none">
-                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                              <rect
-                                x={selectedChange.highlight.x}
-                                y={selectedChange.highlight.y}
-                                width={selectedChange.highlight.w}
-                                height={selectedChange.highlight.h}
-                                fill={getHighlightFillColor(selectedChange.category)}
-                                stroke={getHighlightStrokeColor(selectedChange.category)}
-                                strokeWidth="2"
-                                strokeDasharray="4,4"
-                              />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-brand-neutral-700">{t('common.loading')}</span>
-                    )}
-                  </div>
-                </Card>
+            {/* PERIOD 1 */}
+            <div className="space-y-4 border p-4 rounded-lg bg-slate-50">
+              <h3 className="text-lg font-bold text-brand-neutral-800">Period 1</h3>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-brand-neutral-600">Start Date</label>
+                  <input type="text" value={p1Start} onChange={e => setP1Start(e.target.value)} className="w-full text-sm border rounded p-1.5" />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-brand-neutral-600">End Date</label>
+                  <input type="text" value={p1End} onChange={e => setP1End(e.target.value)} className="w-full text-sm border rounded p-1.5" />
+                </div>
               </div>
-            ) : (
-              // Interactive Swipe Comparison Frame
-              <Card className="overflow-hidden relative bg-brand-neutral-100 border border-brand-neutral-200 h-[350px] md:h-[500px] select-none">
-                <div className="w-full h-full relative overflow-hidden">
-                  {/* Bottom Image (Before Date - May 2022) */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {beforeImageUrl && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img 
-                        src={beforeImageUrl} 
-                        className="object-cover w-full h-full" 
-                        alt="Earlier Observation" 
-                        draggable={false}
-                      />
-                    )}
+              <div className="w-1/2">
+                  <label className="text-xs font-semibold text-brand-neutral-600">Cloud Threshold %</label>
+                  <input type="number" value={cloudThresh} onChange={e => setCloudThresh(parseInt(e.target.value))} className="w-full text-sm border rounded p-1.5" />
+              </div>
+
+              <Button onClick={() => fetchPeriod(1)} disabled={loading1 || lat === null || lon === null || isNaN(lat) || isNaN(lon)} className="w-full bg-slate-800 text-white hover:bg-slate-900">
+                {loading1 && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                GET PERIOD 1 DATA FROM GEE
+              </Button>
+
+              {error1 && <div className="text-red-500 text-sm font-semibold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> {error1}</div>}
+              
+              {p1Data && (
+                <div className="bg-white border rounded p-4 text-sm space-y-3 shadow-sm mt-4">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-bold text-emerald-700">PERIOD 1 — GEE VERIFIED</span>
+                    <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">Verified: true</span>
                   </div>
-
-                  {/* Top Image (Recent Date - May 2025) with dynamic clip path */}
-                  <div 
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none" 
-                    style={{ clipPath: `polygon(${swipePosition}% 0, 100% 0, 100% 100%, ${swipePosition}% 100%)` }}
-                  >
-                    {afterImageUrl && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img 
-                        src={afterImageUrl} 
-                        className="object-cover w-full h-full" 
-                        alt="Recent Observation" 
-                        draggable={false}
-                      />
-                    )}
-                  </div>
-
-                  {/* SVG highlight overlay over the entire zoomed frame */}
-                  {selectedChange && selectedChange.highlight && (
-                    <div className="absolute inset-0 pointer-events-none z-10">
-                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <rect
-                          x={selectedChange.highlight.x}
-                          y={selectedChange.highlight.y}
-                          width={selectedChange.highlight.w}
-                          height={selectedChange.highlight.h}
-                          fill={getHighlightFillColor(selectedChange.category)}
-                          stroke={getHighlightStrokeColor(selectedChange.category)}
-                          strokeWidth="2"
-                          strokeDasharray="4,4"
-                        />
-                      </svg>
-                    </div>
-                  )}
-
-                  {/* Vertical separator line at slider pos */}
-                  <div 
-                    className="absolute top-0 bottom-0 z-20 pointer-events-none w-[2px] bg-brand-green-700 flex items-center justify-center"
-                    style={{ left: `${swipePosition}%` }}
-                  >
-                    {/* Drag slider handle pill */}
-                    <div className="absolute p-2 bg-brand-green-700 text-white rounded-brand-full border border-white shadow-brand-lg pointer-events-auto cursor-ew-resize flex items-center justify-center">
-                      <Columns className="h-4.5 w-4.5 rotate-90" />
-                    </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <span className="text-slate-500 font-semibold">Source:</span><span className="font-medium text-right text-slate-800">Google Earth Engine</span>
+                    <span className="text-slate-500 font-semibold">Images found:</span><span className="font-mono text-right text-slate-800">{p1Data.samples_analyzed || p1Data.images_found || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">Acquisition dates:</span><span className="text-right text-slate-800 truncate" title={p1Data.actual_dates?.join(', ') || 'N/A'}>{p1Data.actual_dates ? p1Data.actual_dates.length + ' dates' : 'N/A'}</span>
+                    
+                    <div className="col-span-2 border-t mt-1 pt-2"></div>
+                    
+                    <span className="text-slate-500 font-semibold">NDVI:</span><span className="font-mono text-right text-slate-800">{getVal(p1Data, 'NDVI')?.toFixed(4) || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">NDWI:</span><span className="font-mono text-right text-slate-800">{getVal(p1Data, 'NDWI')?.toFixed(4) || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">NDBI:</span><span className="font-mono text-right text-slate-800">{getVal(p1Data, 'NDBI')?.toFixed(4) || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">Predicted Class:</span><span className="font-mono text-right text-slate-800">{p1Data.point?.prediction || 'N/A'}</span>
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* Draggable transparent range slider covering image */}
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={swipePosition} 
-                  onChange={(e) => setSwipePosition(Number(e.target.value))}
-                  className="absolute inset-0 opacity-0 w-full h-full cursor-ew-resize z-30"
-                />
-              </Card>
-            )}
+            {/* PERIOD 2 */}
+            <div className="space-y-4 border p-4 rounded-lg bg-slate-50">
+              <h3 className="text-lg font-bold text-brand-neutral-800">Period 2</h3>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-brand-neutral-600">Start Date</label>
+                  <input type="text" value={p2Start} onChange={e => setP2Start(e.target.value)} className="w-full text-sm border rounded p-1.5" />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-brand-neutral-600">End Date</label>
+                  <input type="text" value={p2End} onChange={e => setP2End(e.target.value)} className="w-full text-sm border rounded p-1.5" />
+                </div>
+              </div>
+              <div className="w-1/2">
+                  <label className="text-xs font-semibold text-brand-neutral-600">Cloud Threshold %</label>
+                  <input type="number" value={cloudThresh} onChange={e => setCloudThresh(parseInt(e.target.value))} className="w-full text-sm border rounded p-1.5" />
+              </div>
 
-            {/* Selected Finding Detail Description */}
-            {selectedChange && (
-              <Card className="border-l-4 border-l-brand-green-700 bg-brand-green-50/10">
-                <CardContent className="p-4 md:p-5 space-y-3">
-                  <div className="flex justify-between items-center flex-wrap gap-2">
-                    <h5 className="font-bold text-brand-neutral-900 text-sm md:text-base">
-                      {selectedChange.title} — {selectedChange.statusLabel} {t('analysis.selectedFindingDetails')}
-                    </h5>
-                    {/* Statistics list */}
-                    {selectedChange.statistics && (
-                      <div className="flex gap-3 text-xs bg-white px-2.5 py-1 rounded-brand-md border border-brand-neutral-200">
-                        <div>
-                          <span className="text-brand-neutral-700 font-medium">{t('compare.before')}:</span>{' '}
-                          <span className="font-bold text-brand-neutral-900">{selectedChange.statistics.before}</span>
-                        </div>
-                        <div>
-                          <span className="text-brand-neutral-700 font-medium">{t('compare.after')}:</span>{' '}
-                          <span className="font-bold text-brand-neutral-900">{selectedChange.statistics.after}</span>
-                        </div>
-                        <div>
-                          <span className="text-brand-neutral-700 font-medium">{t('compare.changeSummary')}:</span>{' '}
-                          <span className="font-bold text-brand-green-700">{selectedChange.statistics.change}</span>
-                        </div>
-                      </div>
-                    )}
+              <Button onClick={() => fetchPeriod(2)} disabled={loading2 || lat === null || lon === null || isNaN(lat) || isNaN(lon)} className="w-full bg-slate-800 text-white hover:bg-slate-900">
+                {loading2 && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                GET PERIOD 2 DATA FROM GEE
+              </Button>
+
+              {error2 && <div className="text-red-500 text-sm font-semibold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> {error2}</div>}
+              
+              {p2Data && (
+                <div className="bg-white border rounded p-4 text-sm space-y-3 shadow-sm mt-4">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-bold text-emerald-700">PERIOD 2 — GEE VERIFIED</span>
+                    <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">Verified: true</span>
                   </div>
-                  <p className="text-xs md:text-sm text-brand-neutral-700 leading-relaxed">
-                    {selectedChange.description}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* WHAT CHANGED: Grid of findings cards (Desktop: 3 col, Tablet: 2 col, Mobile: 1 col) */}
-            {comparisonResult && (
-              <Card>
-                <CardContent className="p-4 md:p-5 space-y-4">
-                  <h4 className="font-bold text-brand-neutral-900 text-base border-b border-brand-neutral-100 pb-2">
-                    {t('compare.whatChanged')}
-                  </h4>
-                  <p className="text-xs text-brand-neutral-700 leading-normal">
-                    {t('compare.selectChangeHint')}
-                  </p>
-                  <FindingsList
-                    findings={changeFindingsAsFindings}
-                    selectedFindingId={selectedChange?.id || null}
-                    onSelectFinding={(f) => {
-                      const match = comparisonResult?.changes.find(c => c.id === f.id);
-                      if (match) setSelectedChange(match);
-                    }}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-                  />
-                </CardContent>
-              </Card>
-            )}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <span className="text-slate-500 font-semibold">Source:</span><span className="font-medium text-right text-slate-800">Google Earth Engine</span>
+                    <span className="text-slate-500 font-semibold">Images found:</span><span className="font-mono text-right text-slate-800">{p2Data.samples_analyzed || p2Data.images_found || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">Acquisition dates:</span><span className="text-right text-slate-800 truncate" title={p2Data.actual_dates?.join(', ') || 'N/A'}>{p2Data.actual_dates ? p2Data.actual_dates.length + ' dates' : 'N/A'}</span>
+                    
+                    <div className="col-span-2 border-t mt-1 pt-2"></div>
+                    
+                    <span className="text-slate-500 font-semibold">NDVI:</span><span className="font-mono text-right text-slate-800">{getVal(p2Data, 'NDVI')?.toFixed(4) || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">NDWI:</span><span className="font-mono text-right text-slate-800">{getVal(p2Data, 'NDWI')?.toFixed(4) || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">NDBI:</span><span className="font-mono text-right text-slate-800">{getVal(p2Data, 'NDBI')?.toFixed(4) || 'N/A'}</span>
+                    <span className="text-slate-500 font-semibold">Predicted Class:</span><span className="font-mono text-right text-slate-800">{p2Data.point?.prediction || 'N/A'}</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* RIGHT PANEL: GPT-OSS AI Assistant (Desktop: 1 column, Mobile: Stacks under center content) */}
-          <div className="lg:col-span-1 space-y-6">
-            <Card className="h-full">
-              <CardContent className="p-4 md:p-5">
-                <AIAssistant
-                  context={{
-                    locationId: location.id,
-                    areaName: location.name,
-                    beforeDate: beforeDateId,
-                    afterDate: afterDateId,
-                    findings: comparisonResult?.changes || [],
-                    comparison: comparisonResult || undefined
-                  }}
-                  onSelectFindingById={handleSelectFindingById}
-                />
-              </CardContent>
-            </Card>
+          <div className="mt-8 flex justify-center">
+            <Button 
+                onClick={() => setShowCompare(true)} 
+                disabled={!p1Data || !p2Data}
+                className="w-full md:w-auto px-12 py-6 text-lg font-bold bg-brand-green-700 hover:bg-brand-green-800 text-white shadow-md disabled:bg-slate-200 disabled:text-slate-400"
+            >
+              COMPARE PERIOD 1 AND PERIOD 2
+            </Button>
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* TECHNICAL DETAILS: Collapsed by default, placed at the very bottom of the page */}
-      {compareState === 'results' && (
-        <div className="mt-6">
-          <TechDetailsPanel groups={getTechDetailsGroups()} />
-        </div>
+      {/* COMPARISON RESULTS */}
+      {showCompare && p1Data && p2Data && (
+        <Card className="border-emerald-200 shadow-md">
+          <CardContent className="p-0">
+            <div className="bg-slate-50 p-6 border-b">
+                <h3 className="text-xl font-bold text-slate-800 mb-2">GEE Verified Change Analysis</h3>
+                <p className="text-sm text-slate-600">Calculated strictly as `change = Period 2 - Period 1` from independent GEE responses.</p>
+            </div>
+            
+            <div className="overflow-x-auto p-6">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-100 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Metric</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Period 1 Value</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Period 2 Value</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Change (P2 - P1)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {ALL_METRICS.map(metric => {
+                    const v1 = getVal(p1Data, metric);
+                    const v2 = getVal(p2Data, metric);
+                    if (v1 === null || v2 === null) return null;
+                    
+                    const change = v2 - v1;
+                    const isPositive = change > 0;
+                    const absChange = Math.abs(change);
+                    
+                    // Skip tiny floating point changes
+                    if (absChange < 0.0001) return null;
+                    
+                    return (
+                      <tr key={metric} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-bold text-slate-800">{metric} {LAND_COVERS.includes(metric) ? '(%)' : ''}</td>
+                        <td className="px-4 py-3 font-mono text-slate-600">{v1.toFixed(4)}</td>
+                        <td className="px-4 py-3 font-mono text-slate-600">{v2.toFixed(4)}</td>
+                        <td className={`px-4 py-3 font-mono font-bold ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {isPositive ? '+' : ''}{change.toFixed(4)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* GRAPHS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 border-t bg-white">
+              <div>
+                <h4 className="text-center font-bold text-slate-700 mb-4">Spectral Indices</h4>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={SPECTRAL_KEYS.map(metric => {
+                        const v1 = getVal(p1Data, metric);
+                        const v2 = getVal(p2Data, metric);
+                        if (v1 === null || v2 === null) return null;
+                        return { name: metric, "Period 1": Number(v1.toFixed(4)), "Period 2": Number(v2.toFixed(4)) };
+                      }).filter(Boolean)}
+                      margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                      <Bar dataKey="Period 1" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="Period 2" fill="#047857" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-center font-bold text-slate-700 mb-4">Land Cover (%)</h4>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={LAND_COVERS.map(metric => {
+                        const v1 = getVal(p1Data, metric);
+                        const v2 = getVal(p2Data, metric);
+                        if (v1 === null || v2 === null) return null;
+                        return { name: metric, "Period 1": Number(v1.toFixed(2)), "Period 2": Number(v2.toFixed(2)) };
+                      }).filter(Boolean)}
+                      margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                      <Bar dataKey="Period 1" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="Period 2" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 }
 
 export default function ComparePage() {
-  const { t } = useTranslation();
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <LoadingState 
-          message={t('compare.loadingComparison')} 
-          description={t('compare.loadingDesc')} 
-          size="lg"
-        />
-      </div>
-    }>
-      <CompareContent />
+    <Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="w-8 h-8 animate-spin" /></div>}>
+      <ComparePageContent />
     </Suspense>
   );
 }

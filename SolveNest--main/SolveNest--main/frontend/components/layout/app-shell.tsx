@@ -43,7 +43,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   return (
     <div className="flex h-screen overflow-hidden bg-brand-neutral-50">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:flex-col md:w-64 border-r border-brand-neutral-200 bg-white">
+      <aside className="hidden md:flex md:flex-col md:w-64 border-r border-brand-neutral-200 bg-white relative z-[999]">
         {/* App Title / Logo */}
         <div className="flex items-center gap-2 h-16 px-6 border-b border-brand-neutral-200 bg-white">
           <Leaf className="h-5 w-5 text-brand-green-700" />
