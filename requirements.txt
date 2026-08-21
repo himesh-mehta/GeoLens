@@ -1,8 +1,9 @@
-﻿Flask>=3.0.0
+Flask>=3.0.0
 flask-cors>=4.0.0
 requests
 earthengine-api
 pandas
+numpy
 scikit-learn
 joblib
 google-generativeai
@@ -10,4 +11,6 @@ Pillow
 tifffile
 imagecodecs
 rasterio
-
+python-dotenv
+imbalanced-learn
+tqdm
