@@ -150,14 +150,33 @@ function CustomZoomControl() {
 }
 
 // Map camera controller to handle smooth zoom & flyTo panning on location changes
-function MapCameraController({ center }: { center?: [number, number] | null }) {
+function MapCameraController({ center, selectedPoint }: { center?: [number, number] | null; selectedPoint?: [number, number] | null }) {
   const map = useMapEvents({});
+  const hasMountedRef = useRef(false);
+  const lastPointRef = useRef<[number, number] | null>(null);
 
   useEffect(() => {
-    if (center && typeof center[0] === 'number' && typeof center[1] === 'number' && !isNaN(center[0]) && !isNaN(center[1])) {
-      map.flyTo(center, 13, { duration: 1.2 });
+    // On first mount, fly to the initial center (or selectedPoint if available)
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      const target = selectedPoint || center;
+      if (target && typeof target[0] === 'number' && typeof target[1] === 'number' && !isNaN(target[0]) && !isNaN(target[1])) {
+        map.flyTo(target, 13, { duration: 1.2 });
+        lastPointRef.current = target;
+      }
+      return;
     }
-  }, [center, map]);
+
+    // After mount, only fly when selectedPoint changes to a NEW non-null value
+    // This prevents snapping back to origin when polygon mode clears selectedPoint
+    if (selectedPoint && typeof selectedPoint[0] === 'number' && typeof selectedPoint[1] === 'number' && !isNaN(selectedPoint[0]) && !isNaN(selectedPoint[1])) {
+      const prev = lastPointRef.current;
+      if (!prev || prev[0] !== selectedPoint[0] || prev[1] !== selectedPoint[1]) {
+        map.flyTo(selectedPoint, 13, { duration: 1.2 });
+        lastPointRef.current = selectedPoint;
+      }
+    }
+  }, [selectedPoint, center, map]);
 
   return null;
 }
@@ -495,7 +514,7 @@ export default function MapComponent({
         style={{ height: '100%', width: '100%', zIndex: 10 }}
       >
         <MapAutoResizer />
-        <MapCameraController center={selectedPoint || center} />
+        <MapCameraController center={center} selectedPoint={selectedPoint} />
         <CustomZoomControl />
 
         {activeBaseLayer === 'map' && (

@@ -57,6 +57,7 @@ interface PolygonResult {
   samples_analyzed: number;
   date_range: string;
   distribution: Record<string, { sample_count: number; regional_landcover_percentage: number }>;
+  spectral_means: Record<string, number>;
   year_status: string;
   validated_accuracy_available: boolean;
 }
@@ -373,6 +374,7 @@ export default function ExplorerPage() {
           const mappedPolyRes: PolygonResult = {
             samples_analyzed: res.samples_analyzed,
             distribution: res.aoi_statistics?.distribution || {},
+            spectral_means: res.aoi_statistics?.spectral_means || {},
             date_range: `${startDate} - ${endDate}`,
             year_status: res.is_fallback ? 'inference_only' : 'validated_year',
             validated_accuracy_available: !res.is_fallback
@@ -1034,22 +1036,24 @@ export default function ExplorerPage() {
                 <div className="flex items-baseline justify-between">
                   <div>
                     <p className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-[#6B7568]' : 'text-[#94A3B8]'}`}>
-                      Class Probability
+                      {pointResult ? 'Class Probability' : 'Dominant Class Coverage'}
                     </p>
                     <p className={`text-[10px] italic ${isLight ? 'text-[#6B7568]' : 'text-[#64748B]'}`}>
-                      (not overall accuracy)
+                      {pointResult ? '(not overall accuracy)' : '(percentage of total area)'}
                     </p>
                   </div>
                   <span className="text-2xl font-black font-mono">
-                    {((pointResult?.confidence || 0.88) * 100).toFixed(1)}%
+                    {pointResult 
+                      ? ((pointResult.confidence || 0) * 100).toFixed(1) 
+                      : (getDominantClass()?.[1]?.regional_landcover_percentage || 0).toFixed(1)}%
                   </span>
                 </div>
                 <div className={`w-full h-3 rounded-full border overflow-hidden ${isLight ? 'bg-[#F5F5F0] border-[#D8DCCF]' : 'bg-[#0F172A] border-[#334155]'}`}>
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
-                      width: `${(pointResult?.confidence || 0.88) * 100}%`,
-                      backgroundColor: classColors[pointResult?.prediction || 'Agriculture'] || '#4C7A3D'
+                      width: `${pointResult ? (pointResult.confidence || 0) * 100 : (getDominantClass()?.[1]?.regional_landcover_percentage || 0)}%`,
+                      backgroundColor: classColors[pointResult?.prediction || getDominantClass()?.[0] || 'Agriculture'] || '#4C7A3D'
                     }}
                   />
                 </div>
@@ -1062,15 +1066,16 @@ export default function ExplorerPage() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                   {[
-                    { name: 'Agriculture', color: '#eab308' },
-                    { name: 'Vegetation', color: '#8FBC5A' },
-                    { name: 'Water Bodies', color: '#5B9BD5' },
-                    { name: 'Built-up / Urban', color: '#C4823A' },
-                    { name: 'Barren Soil', color: '#A9825A' },
+                    { name: 'Agriculture', backendKey: 'Agriculture', color: '#eab308' },
+                    { name: 'Vegetation', backendKey: 'Vegetation', color: '#8FBC5A' },
+                    { name: 'Water Bodies', backendKey: 'Water', color: '#5B9BD5' },
+                    { name: 'Built-up / Urban', backendKey: 'Built-up', color: '#C4823A' },
+                    { name: 'Barren Soil', backendKey: 'Barren', color: '#A9825A' },
                   ].map((item) => {
-                    const probVal = pointResult?.probabilities?.[item.name] !== undefined
-                      ? (pointResult.probabilities[item.name] as number) * 100
-                      : (pointResult?.probabilities ? 0 : 0); // If probabilities exist but class doesn't, it's 0. If no probabilities, also 0 or we could show Unavailable. We'll show 0.
+                    const probVal = pointResult
+                      ? (pointResult.probabilities?.[item.backendKey] !== undefined ? (pointResult.probabilities[item.backendKey] as number) * 100 : 0)
+                      : (polygonResult?.distribution?.[item.backendKey]?.regional_landcover_percentage ?? 0);
+                    const isAvailable = pointResult ? !!pointResult.probabilities : !!polygonResult?.distribution;
                     return (
                       <div key={item.name} className={`p-3 rounded-xl border space-y-2 ${
                         isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
@@ -1080,7 +1085,7 @@ export default function ExplorerPage() {
                             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
                             <span className="truncate font-semibold text-[11px]">{item.name}</span>
                           </div>
-                          <span className="font-mono font-bold text-[11px] ml-1">{pointResult?.probabilities ? `${probVal.toFixed(1)}%` : 'Unavailable'}</span>
+                          <span className="font-mono font-bold text-[11px] ml-1">{isAvailable ? `${probVal.toFixed(1)}%` : 'Unavailable'}</span>
                         </div>
                         <div className={`w-full h-1.5 rounded-full border overflow-hidden ${isLight ? 'bg-[#F5F5F0] border-[#D8DCCF]' : 'bg-[#0F172A] border-[#334155]'}`}>
                           <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(4, probVal)}%`, backgroundColor: item.color }} />
@@ -1098,12 +1103,12 @@ export default function ExplorerPage() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {[
-                    { label: 'NDVI (VEGETATION INDEX)', val: pointResult?.features?.NDVI ?? 'Unavailable' },
-                    { label: 'MNDWI (WATER INDEX)', val: pointResult?.features?.MNDWI ?? 'Unavailable' },
-                    { label: 'NDBI (BUILT-UP INDEX)', val: pointResult?.features?.NDBI ?? 'Unavailable' },
-                    { label: 'BSI (BARE SOIL INDEX)', val: pointResult?.features?.BSI ?? 'Unavailable' },
-                    { label: 'SAVI (SOIL-ADJUSTED VEG)', val: pointResult?.features?.SAVI ?? 'Unavailable' },
-                    { label: 'EVI (ENHANCED VEG INDEX)', val: pointResult?.features?.EVI ?? 'Unavailable' },
+                    { label: 'NDVI (VEGETATION INDEX)', val: pointResult?.features?.NDVI ?? polygonResult?.spectral_means?.NDVI ?? 'Unavailable' },
+                    { label: 'MNDWI (WATER INDEX)', val: pointResult?.features?.MNDWI ?? polygonResult?.spectral_means?.MNDWI ?? 'Unavailable' },
+                    { label: 'NDBI (BUILT-UP INDEX)', val: pointResult?.features?.NDBI ?? polygonResult?.spectral_means?.NDBI ?? 'Unavailable' },
+                    { label: 'BSI (BARE SOIL INDEX)', val: pointResult?.features?.BSI ?? polygonResult?.spectral_means?.BSI ?? 'Unavailable' },
+                    { label: 'SAVI (SOIL-ADJUSTED VEG)', val: pointResult?.features?.SAVI ?? polygonResult?.spectral_means?.SAVI ?? 'Unavailable' },
+                    { label: 'EVI (ENHANCED VEG INDEX)', val: pointResult?.features?.EVI ?? polygonResult?.spectral_means?.EVI ?? 'Unavailable' },
                   ].map((idxItem) => (
                     <div key={idxItem.label} className={`p-3 rounded-xl border ${
                       isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
@@ -1171,7 +1176,15 @@ export default function ExplorerPage() {
                           isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
                         }`}>
                           <span className="text-[11px] font-semibold text-slate-500">{item.k}</span>
-                          <span className="font-bold text-[11px]">{item.key !== 'none' && pointResult?.features?.[item.key] !== undefined ? pointResult.features[item.key].toFixed(4) : item.v}</span>
+                          <span className="font-bold text-[11px]">
+                            {item.key !== 'none' 
+                              ? (pointResult?.features?.[item.key] !== undefined 
+                                  ? pointResult.features[item.key].toFixed(4) 
+                                  : (polygonResult?.spectral_means?.[item.key] !== undefined 
+                                      ? polygonResult.spectral_means[item.key].toFixed(4) 
+                                      : item.v)) 
+                              : item.v}
+                          </span>
                         </div>
                       ))}
                     </div>

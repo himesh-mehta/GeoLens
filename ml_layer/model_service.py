@@ -308,7 +308,7 @@ class ModelService:
                 
             # Calculate mean spectral indices
             spectral_means = {}
-            for feature in ["NDVI", "NDBI", "NDWI", "MNDWI"]:
+            for feature in self.BASE_FEATURE_NAMES:
                 if feature in feature_df.columns:
                     spectral_means[feature] = round(feature_df[feature].mean(), 4)
             # Calculate query_id and provenance dates

@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BackendAPI } from '@/lib/api-client';
 import { useTheme } from '@/lib/theme/theme-context';
 
-export interface BandInfo {
+interface BandInfo {
   code: string;
   name: string;
   spectrum: string;
@@ -24,7 +24,7 @@ export interface BandInfo {
   iconEmoji: string;
 }
 
-export const SENTINEL2_BANDS: Record<string, BandInfo> = {
+const SENTINEL2_BANDS: Record<string, BandInfo> = {
   B01: { code: 'B01', name: 'Coastal Aerosol', spectrum: '443 nm', badgeBgLight: 'bg-cyan-50', badgeTextLight: 'text-cyan-800', badgeBorderLight: 'border-cyan-200', badgeBgDark: 'bg-cyan-950/60', badgeTextDark: 'text-cyan-300', badgeBorderDark: 'border-cyan-800/60', iconEmoji: '🌊' },
   B02: { code: 'B02', name: 'Blue', spectrum: '490 nm', badgeBgLight: 'bg-blue-50', badgeTextLight: 'text-blue-800', badgeBorderLight: 'border-blue-200', badgeBgDark: 'bg-blue-950/60', badgeTextDark: 'text-blue-300', badgeBorderDark: 'border-blue-800/60', iconEmoji: '🔵' },
   B03: { code: 'B03', name: 'Green', spectrum: '560 nm', badgeBgLight: 'bg-emerald-50', badgeTextLight: 'text-emerald-800', badgeBorderLight: 'border-emerald-200', badgeBgDark: 'bg-emerald-950/60', badgeTextDark: 'text-emerald-300', badgeBorderDark: 'border-emerald-800/60', iconEmoji: '🟢' },
