@@ -1,13 +1,4 @@
 "use client";
-<<<<<<< Updated upstream
-=======
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, Send, Loader2, AlertCircle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
-import { aiService, AIQuestionContext, Message, ConversationTurn } from '@/services/ai-service';
-import { Button } from '../ui/button';
-import { useTranslation } from '@/lib/i18n';
->>>>>>> Stashed changes
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Send, User, ChevronDown, ChevronUp, AlertCircle, RefreshCw, Sparkles, MapPin, X, HelpCircle, Layers, Droplets, Building2, Trees, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
@@ -25,7 +16,6 @@ export interface AIAssistantProps {
   placeholder?: string;
 }
 
-<<<<<<< Updated upstream
 interface Message {
   id: string;
   sender: 'user' | 'ai';
@@ -35,79 +25,6 @@ interface Message {
 }
 
 export function AIAssistant({
-=======
-/** Parse GPT-OSS text into inline bold + list items for clean display */
-function renderFormattedText(text: string): React.ReactNode[] {
-  return text.split('\n').map((line, i) => {
-    const parseInlineBold = (t: string): React.ReactNode[] => {
-      const parts = t.split(/(\*\*.*?\*\*)/g);
-      return parts.map((part, j) =>
-        part.startsWith('**') && part.endsWith('**')
-          ? <strong key={j}>{part.slice(2, -2)}</strong>
-          : <React.Fragment key={j}>{part}</React.Fragment>
-      );
-    };
-
-    if (/^#{1,3}\s/.test(line)) {
-      return <p key={i} className="font-semibold text-[#0f172a] mt-2 mb-0.5 leading-snug">{parseInlineBold(line.replace(/^#+\s/, ''))}</p>;
-    }
-    if (/^[-*]\s/.test(line)) {
-      return (
-        <div key={i} className="flex items-start gap-1.5 my-0.5">
-          <span className="text-[#10b981] mt-1 flex-shrink-0 text-xs">•</span>
-          <span className="leading-relaxed">{parseInlineBold(line.slice(2))}</span>
-        </div>
-      );
-    }
-    if (line.trim() === '') return <div key={i} className="h-1.5" />;
-    return <p key={i} className="my-0.5 leading-relaxed">{parseInlineBold(line)}</p>;
-  });
-}
-
-/** Contextual suggested questions based on what's available in context */
-function getContextualSuggestions(context: AIQuestionContext, t: (key: string) => string): string[] {
-  const hasResult = !!(context.analysisResult);
-  const isComparison = !!context.beforeDate;
-  const ar = context.analysisResult;
-
-  if (!hasResult) {
-    return [
-      'What can I learn from this area?',
-      'What does satellite imagery show?',
-    ];
-  }
-
-  const suggestions: string[] = [];
-
-  if (isComparison) {
-    suggestions.push('What changed here?');
-    suggestions.push('Why did this change happen?');
-    suggestions.push('Where did vegetation decrease?');
-    suggestions.push('Is this area good for farming?');
-  } else {
-    const pred = ar?.prediction?.toLowerCase() || '';
-    if (pred.includes('water')) {
-      suggestions.push('Is there water here?');
-      suggestions.push('What is the water condition?');
-    } else if (pred.includes('vegetation')) {
-      suggestions.push('How is the vegetation here?');
-      suggestions.push('Is this area good for farming?');
-    } else if (pred.includes('built')) {
-      suggestions.push('How built-up is this area?');
-      suggestions.push('Has construction increased?');
-    } else {
-      suggestions.push('What changed here?');
-      suggestions.push('How is the vegetation?');
-    }
-    suggestions.push('Is there water here?');
-    suggestions.push('Give me the technical details.');
-  }
-
-  return suggestions.slice(0, 4);
-}
-
-export const AIAssistant: React.FC<AIAssistantProps> = ({
->>>>>>> Stashed changes
   context,
   onSelectFindingById,
   onClose,
@@ -122,7 +39,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-<<<<<<< Updated upstream
   const [showGuide, setShowGuide] = useState(false);
   const [focusedChipIndex, setFocusedChipIndex] = useState<number>(-1);
 
@@ -140,38 +56,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
-=======
-  // Track conversation history for multi-turn GPT-OSS context (max 6 turns)
-  const conversationHistoryRef = useRef<ConversationTurn[]>([]);
-
-  const displayTitle = title || (context.beforeDate ? 'Ask about this change' : 'Ask AI Assistant');
-  const displayPlaceholder = placeholder || 'Type your question...';
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, errorMsg]);
-
-  // Reset conversation when location/dates change
-  useEffect(() => {
-    setMessages([]);
-    setErrorMsg(null);
-    setInputValue('');
-    conversationHistoryRef.current = [];
-  }, [context.locationId, context.beforeDate, context.afterDate]);
-
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || isLoading) return;
->>>>>>> Stashed changes
 
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim() || isLoading) return;
 
-<<<<<<< Updated upstream
     const userText = textToSend.trim();
-=======
->>>>>>> Stashed changes
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       sender: 'user',
@@ -188,15 +77,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       { role: 'user' as const, content: userText }
     ].slice(-12);
 
-    // Append user turn to history before calling
-    conversationHistoryRef.current = [
-      ...conversationHistoryRef.current,
-      { role: 'user' as const, content: text }
-    ].slice(-12); // keep last 12 entries (6 turns)
 
     try {
       const response = await aiService.askQuestion(
-<<<<<<< Updated upstream
         userText,
         context,
         lang,
@@ -235,29 +118,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Failed to reach AI service.");
-=======
-        text,
-        { ...context, language: lang },
-        conversationHistoryRef.current
-      );
-
-      const aiMsg: Message = {
-        id: `ai-${Date.now()}`,
-        sender: 'ai',
-        text: response.answer,
-        findingIds: response.findingIds
-      };
-      setMessages(prev => [...prev, aiMsg]);
-
-      // Append AI turn to history
-      conversationHistoryRef.current = [
-        ...conversationHistoryRef.current,
-        { role: 'assistant' as const, content: response.answer }
-      ].slice(-12);
-    } catch (err) {
-      console.error(err);
-      setErrorMsg('Could not get an answer. Please try again.');
->>>>>>> Stashed changes
     } finally {
       setIsLoading(false);
     }
@@ -268,7 +128,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     handleSendMessage(inputValue);
   };
 
-<<<<<<< Updated upstream
   const primarySuggestions = [
     { icon: HelpCircle, text: lang === 'hi' ? 'यहाँ क्या बदला?' : lang === 'mr' ? 'इथे काय बदलले?' : 'What changed here?' },
     { icon: Trees, text: lang === 'hi' ? 'वनस्पति क्यों कम हुई?' : lang === 'mr' ? 'वनस्पती का कमी झाली?' : 'Why did vegetation decrease?' },
@@ -409,82 +268,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                       }`}
                     >
                       Show on map
-=======
-  const suggestions = getContextualSuggestions(context, t);
-  const hasAnalysis = !!(context.analysisResult);
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-[#e2e8f0] bg-white flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-indigo-100 rounded-md">
-            <Sparkles className="h-4 w-4 text-indigo-600" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-[#0f172a] leading-none truncate">Ask AI Assistant</p>
-            <p className="text-[10px] text-[#64748b] mt-0.5 leading-none">GPT-OSS · {hasAnalysis ? 'Analysis loaded' : 'Select a location first'}</p>
-          </div>
-          <div className="ml-auto flex-shrink-0">
-            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-              hasAnalysis
-                ? 'bg-green-50 text-green-700 border border-green-200'
-                : 'bg-amber-50 text-amber-700 border border-amber-200'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${hasAnalysis ? 'bg-green-500' : 'bg-amber-400 animate-pulse'}`} />
-              {hasAnalysis ? 'Ready' : 'Waiting'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Conversation area */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 bg-[#f8fafc]">
-        {messages.length === 0 && !isLoading && !errorMsg && (
-          <div className="text-center py-8 px-4">
-            <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Sparkles className="h-5 w-5 text-indigo-400" />
-            </div>
-            <p className="text-sm text-[#334155] font-medium">
-              {hasAnalysis ? 'Analysis ready. Ask a question below.' : 'Run "Analyze Area" first, then ask questions here.'}
-            </p>
-            {!hasAnalysis && (
-              <p className="text-xs text-[#64748b] mt-1">The assistant uses real EO data to answer.</p>
-            )}
-          </div>
-        )}
-
-        {messages.map((msg) => {
-          const isAi = msg.sender === 'ai';
-          return (
-            <div
-              key={msg.id}
-              className={`flex ${isAi ? 'justify-start' : 'justify-end'}`}
-            >
-              <div className={`max-w-[88%] rounded-xl px-3 py-2.5 text-xs leading-relaxed ${
-                isAi
-                  ? 'bg-white border border-[#e2e8f0] text-[#1e293b] rounded-tl-sm shadow-sm'
-                  : 'bg-indigo-600 text-white rounded-tr-sm'
-              }`}>
-                {isAi && (
-                  <div className="flex items-center gap-1 mb-1.5">
-                    <Sparkles className="h-2.5 w-2.5 text-indigo-500" />
-                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">AI</span>
-                  </div>
-                )}
-                <div className="text-xs">
-                  {isAi ? renderFormattedText(msg.text) : msg.text}
-                </div>
-
-                {isAi && msg.findingIds && msg.findingIds.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-[#e2e8f0]">
-                    <button
-                      type="button"
-                      onClick={() => onSelectFindingById(msg.findingIds![0])}
-                      className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[10px] font-semibold tracking-wide transition-all cursor-pointer"
-                    >
-                      Show on map →
->>>>>>> Stashed changes
                     </button>
                   </div>
                 )}
@@ -493,7 +276,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           );
         })}
 
-<<<<<<< Updated upstream
         {/* Loading indicator */}
         {isLoading && (
           <div className="flex justify-start">
@@ -503,59 +285,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
               <Loader2 className={`h-3.5 w-3.5 animate-spin ${isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}`} />
               <span>Analyzing imagery & spectral indices...</span>
             </div>
-=======
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-[#e2e8f0] rounded-xl rounded-tl-sm px-3 py-2.5 shadow-sm flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
-              <span className="text-xs text-[#64748b]">Thinking...</span>
-            </div>
           </div>
         )}
 
-        {errorMsg && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-red-700 font-medium">{errorMsg}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg(null);
-                  const lastUser = messages.filter(m => m.sender === 'user').pop();
-                  if (lastUser) handleSendMessage(lastUser.text);
-                }}
-                className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-red-600 hover:text-red-800 cursor-pointer"
-              >
-                <RefreshCw className="h-2.5 w-2.5" /> Try again
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Suggested questions */}
-      {!isLoading && !errorMsg && (
-        <div className="px-3 py-2 border-t border-[#e2e8f0] bg-white flex-shrink-0">
-          <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider mb-1.5">Suggested</p>
-          <div className="flex flex-wrap gap-1.5">
-            {suggestions.map((q) => (
-              <button
-                key={q}
-                type="button"
-                onClick={() => handleSendMessage(q)}
-                className="px-2.5 py-1 bg-[#f1f5f9] hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-[#e2e8f0] text-[10px] font-medium text-[#334155] rounded-full transition-colors cursor-pointer"
-              >
-                {q}
-              </button>
-            ))}
->>>>>>> Stashed changes
-          </div>
-        )}
-
-<<<<<<< Updated upstream
         {/* Error message */}
         {errorMsg && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-xs text-red-700">
@@ -586,11 +318,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         </p>
 
         {/* Input & Send button */}
-=======
-      {/* Input */}
-      <div className="px-3 py-2.5 border-t border-[#e2e8f0] bg-white flex-shrink-0">
-        <p className="text-[10px] text-[#94a3b8] mb-1.5">You can also ask in your own words</p>
->>>>>>> Stashed changes
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
@@ -598,30 +325,20 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
             value={inputValue}
             disabled={isLoading}
             onChange={(e) => setInputValue(e.target.value)}
-<<<<<<< Updated upstream
             className={`flex-1 px-3 py-2 text-xs border rounded-lg outline-none disabled:opacity-50 ${
               isLight
                 ? 'bg-[#F5F5F0] border-[#D8DCCF] text-[#2D3B27] placeholder:text-[#6B7568] focus:ring-2 focus:ring-[#4C7A3D] focus:border-[#4C7A3D]'
                 : 'bg-[#0F172A] border-[#334155] text-[#F1F5F9] placeholder:text-[#64748B] focus:ring-2 focus:ring-[#14B8A6] focus:border-[#14B8A6]'
             }`}
-=======
-            className="flex-1 px-3 py-1.5 text-xs border border-[#e2e8f0] rounded-lg bg-white text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
->>>>>>> Stashed changes
           />
           <button
             type="submit"
             disabled={isLoading || !inputValue.trim()}
-<<<<<<< Updated upstream
             className={`px-3.5 py-2 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer flex items-center justify-center flex-shrink-0 ${
               isLight ? 'bg-[#4C7A3D] hover:bg-[#3D6330]' : 'bg-[#14B8A6] hover:bg-[#0F766E]'
             }`}
           >
             <Send className="h-3.5 w-3.5" />
-=======
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg flex items-center gap-1 text-xs font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed"
-          >
-            <Send className="h-3 w-3" />
->>>>>>> Stashed changes
           </button>
         </form>
       </div>
