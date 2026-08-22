@@ -1,13 +1,12 @@
 'use client';
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Loader2, AlertCircle, Search } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Search, RefreshCw, Zap } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { BackendAPI } from '@/lib/api-client';
 import { eoService, Location } from '@/services/eo-service';
-import { LoadingState } from '@/components/ui/loading-state';
 import dynamic from 'next/dynamic';
 const DynamicMap = dynamic(() => import('@/components/map/DynamicMap'), { ssr: false });
 
@@ -56,6 +55,9 @@ function ComparePageContent() {
   const [lat, setLat] = useState<number | null>(null);
   const [lon, setLon] = useState<number | null>(null);
 
+  // In-memory cache for compare page GEE requests
+  const compareCache = useRef<Map<string, any>>(new Map());
+
   const [locations, setLocations] = useState<Location[]>([]);
   useEffect(() => {
     eoService.getAllLocations().then(setLocations);
@@ -102,6 +104,10 @@ function ComparePageContent() {
 
   const [loading1, setLoading1] = useState(false);
   const [loading2, setLoading2] = useState(false);
+  const [isBothFetching, setIsBothFetching] = useState(false);
+
+  const [step1Msg, setStep1Msg] = useState('Querying Sentinel-2 imagery...');
+  const [step2Msg, setStep2Msg] = useState('Querying Sentinel-2 imagery...');
 
   const [error1, setError1] = useState<string | null>(null);
   const [error2, setError2] = useState<string | null>(null);
@@ -112,56 +118,128 @@ function ComparePageContent() {
   const [searchResults, setSearchResults] = useState<{lat: string, lon: string, display_name: string}[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  const fetchPeriod = async (num: 1 | 2) => {
+  // Auto-enable & trigger comparison when both periods are loaded
+  useEffect(() => {
+    if (p1Data && p2Data) {
+      setShowCompare(true);
+    }
+  }, [p1Data, p2Data]);
+
+  const fetchPeriodData = async (num: 1 | 2) => {
     const isP1 = num === 1;
-    isP1 ? setLoading1(true) : setLoading2(true);
-    isP1 ? setError1(null) : setError2(null);
-    isP1 ? setP1Data(null) : setP2Data(null);
-    setShowCompare(false);
+    const s = parseDate(isP1 ? p1Start : p2Start);
+    const e = parseDate(isP1 ? p1End : p2End);
+
+    const cacheKey = lat !== null && lon !== null
+      ? `compare:pt:${lat.toFixed(4)},${lon.toFixed(4)}:${s}:${e}:${cloudThresh}`
+      : `compare:poly:${polygonStr}:${s}:${e}:${cloudThresh}`;
+
+    // Cache hit
+    if (compareCache.current.has(cacheKey)) {
+      const cached = compareCache.current.get(cacheKey);
+      if (isP1) { setP1Data(cached); setError1(null); }
+      else { setP2Data(cached); setError2(null); }
+      return cached;
+    }
+
+    if (isP1) {
+      setLoading1(true); setError1(null); setP1Data(null);
+      setStep1Msg('Querying Sentinel-2 imagery...');
+    } else {
+      setLoading2(true); setError2(null); setP2Data(null);
+      setStep2Msg('Querying Sentinel-2 imagery...');
+    }
+
+    const step2Timer = setTimeout(() => {
+      isP1 ? setStep1Msg('Processing classification...') : setStep2Msg('Processing classification...');
+    }, 1200);
 
     try {
-      const s = parseDate(isP1 ? p1Start : p2Start);
-      const e = parseDate(isP1 ? p1End : p2End);
-
-      console.log(`[COMPARE PAGE] PERIOD ${num} REQUEST`);
-      console.log(`LAT: ${lat}, LON: ${lon}, START: ${s}, END: ${e}, CLOUD: ${cloudThresh}`);
-
-      let res;
+      let apiPromise: Promise<any>;
       if (lat !== null && lon !== null) {
-        res = await BackendAPI.predictLocation(lat, lon, undefined as any, s, e, cloudThresh);
+        apiPromise = BackendAPI.predictLocation(lat, lon, undefined as any, s, e, cloudThresh);
       } else if (polygonStr) {
         const poly = JSON.parse(polygonStr);
         const geoCoords = poly.map((c: any) => [c[1], c[0]]);
         if (geoCoords.length > 0 && (geoCoords[0][0] !== geoCoords[geoCoords.length - 1][0] || geoCoords[0][1] !== geoCoords[geoCoords.length - 1][1])) {
           geoCoords.push(geoCoords[0]);
         }
-        res = await BackendAPI.predictPolygon(geoCoords, undefined as any, s, e, cloudThresh);
+        apiPromise = BackendAPI.predictPolygon(geoCoords, undefined as any, s, e, cloudThresh);
       } else {
         throw new Error("No location coordinates or polygon found.");
       }
 
-      console.log(`[COMPARE PAGE] PERIOD ${num} RESPONSE`, res);
+      // 25-second timeout wrapper
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("GEE request timed out, tap to retry")), 25000)
+      );
+
+      const res = await Promise.race([apiPromise, timeoutPromise]) as any;
 
       if (!res || res.status === 'error') {
         throw new Error(res?.message || "GEE data unavailable for this period");
       }
 
-      isP1 ? setP1Data(res) : setP2Data(res);
+      compareCache.current.set(cacheKey, res);
+      if (isP1) setP1Data(res);
+      else setP2Data(res);
+
+      return res;
     } catch (err: any) {
-      isP1 ? setError1(err.message || 'Error fetching GEE data') : setError2(err.message || 'Error fetching GEE data');
+      const errMsg = err.message || 'Error fetching GEE data';
+      if (isP1) setError1(errMsg);
+      else setError2(errMsg);
+      throw err;
     } finally {
-      isP1 ? setLoading1(false) : setLoading2(false);
+      clearTimeout(step2Timer);
+      if (isP1) setLoading1(false);
+      else setLoading2(false);
+    }
+  };
+
+  // Parallel Dual Period Fetching
+  const fetchBothPeriods = async () => {
+    setIsBothFetching(true);
+    try {
+      await Promise.allSettled([fetchPeriodData(1), fetchPeriodData(2)]);
+    } finally {
+      setIsBothFetching(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 py-8 px-4">
-      {/* HEADER */}
-      <div className="flex items-center gap-4 border-b border-brand-neutral-200 pb-4">
-        <Button variant="secondary" size="sm" onClick={() => router.push('/explorer')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+    <div className="w-full space-y-5 py-4 px-4 md:px-6">
+      {/* CONSOLIDATED HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4 border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                onClick={() => router.push('/compare')}
+                className="text-base sm:text-lg font-bold text-[#6B7568] dark:text-slate-400 hover:text-[#2D3B27] dark:hover:text-[#F1F5F9] cursor-pointer transition-colors"
+              >
+                Compare
+              </span>
+              <span className="text-sm font-bold text-[#6B7568] dark:text-slate-400">›</span>
+              <h1 className="text-base sm:text-lg font-extrabold text-[#4C7A3D] dark:text-[#14B8A6] truncate max-w-md">
+                {locationName}
+              </h1>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Select location & dual date ranges to analyze multi-temporal GEE spectral changes.
+            </p>
+          </div>
+        </div>
+
+        {/* Dual Parallel Fetch Action */}
+        <Button
+          onClick={fetchBothPeriods}
+          disabled={loading1 || loading2 || isBothFetching || lat === null || lon === null || isNaN(lat) || isNaN(lon)}
+          className="bg-[#4C7A3D] hover:bg-[#3D6330] dark:bg-[#14B8A6] dark:hover:bg-[#0F766E] text-white font-bold text-xs flex items-center gap-1.5 shadow-md py-2.5 px-4 rounded-xl cursor-pointer"
+        >
+          {isBothFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+          <span>FETCH & COMPARE BOTH PERIODS</span>
         </Button>
-        <h2 className="text-2xl font-bold text-brand-neutral-900">GEE Data Comparison: {locationName}</h2>
       </div>
 
       {/* LOCATION INPUTS */}
@@ -265,9 +343,10 @@ function ComparePageContent() {
               </div>
             </div>
             
-            <div className="h-[300px] w-full border rounded-md overflow-hidden relative z-0">
+            <div className="h-[360px] w-full border rounded-xl overflow-hidden relative z-0">
               <DynamicMap 
                 drawMode="point" 
+                showFeatureControls={true}
                 onPointSelected={(l, ln) => { setLat(l); setLon(ln); }} 
                 selectedPoint={lat !== null && lon !== null ? [lat, lon] : null}
               />
@@ -298,12 +377,28 @@ function ComparePageContent() {
                   <input type="number" value={cloudThresh} onChange={e => setCloudThresh(parseInt(e.target.value))} className="w-full text-sm border rounded p-1.5" />
               </div>
 
-              <Button onClick={() => fetchPeriod(1)} disabled={loading1 || lat === null || lon === null || isNaN(lat) || isNaN(lon)} className="w-full bg-slate-800 text-white hover:bg-slate-900">
-                {loading1 && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                GET PERIOD 1 DATA FROM GEE
+              <Button onClick={() => fetchPeriodData(1)} disabled={loading1 || lat === null || lon === null || isNaN(lat) || isNaN(lon)} className="w-full bg-slate-800 text-white hover:bg-slate-900 cursor-pointer">
+                {loading1 ? (
+                  <span className="flex items-center gap-2 text-xs">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Fetching satellite data... ({step1Msg})</span>
+                  </span>
+                ) : (
+                  'GET PERIOD 1 DATA FROM GEE'
+                )}
               </Button>
 
-              {error1 && <div className="text-red-500 text-sm font-semibold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> {error1}</div>}
+              {error1 && (
+                <div className="p-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-xs font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <span>{error1}</span>
+                  </div>
+                  <button onClick={() => fetchPeriodData(1)} className="text-[11px] underline font-bold cursor-pointer hover:text-red-800">
+                    Retry
+                  </button>
+                </div>
+              )}
               
               {p1Data && (
                 <div className="bg-white border rounded p-4 text-sm space-y-3 shadow-sm mt-4">
@@ -345,12 +440,28 @@ function ComparePageContent() {
                   <input type="number" value={cloudThresh} onChange={e => setCloudThresh(parseInt(e.target.value))} className="w-full text-sm border rounded p-1.5" />
               </div>
 
-              <Button onClick={() => fetchPeriod(2)} disabled={loading2 || lat === null || lon === null || isNaN(lat) || isNaN(lon)} className="w-full bg-slate-800 text-white hover:bg-slate-900">
-                {loading2 && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                GET PERIOD 2 DATA FROM GEE
+              <Button onClick={() => fetchPeriodData(2)} disabled={loading2 || lat === null || lon === null || isNaN(lat) || isNaN(lon)} className="w-full bg-slate-800 text-white hover:bg-slate-900 cursor-pointer">
+                {loading2 ? (
+                  <span className="flex items-center gap-2 text-xs">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Fetching satellite data... ({step2Msg})</span>
+                  </span>
+                ) : (
+                  'GET PERIOD 2 DATA FROM GEE'
+                )}
               </Button>
 
-              {error2 && <div className="text-red-500 text-sm font-semibold flex items-center gap-1"><AlertCircle className="w-4 h-4" /> {error2}</div>}
+              {error2 && (
+                <div className="p-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-xs font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <span>{error2}</span>
+                  </div>
+                  <button onClick={() => fetchPeriodData(2)} className="text-[11px] underline font-bold cursor-pointer hover:text-red-800">
+                    Retry
+                  </button>
+                </div>
+              )}
               
               {p2Data && (
                 <div className="bg-white border rounded p-4 text-sm space-y-3 shadow-sm mt-4">
@@ -379,7 +490,7 @@ function ComparePageContent() {
             <Button 
                 onClick={() => setShowCompare(true)} 
                 disabled={!p1Data || !p2Data}
-                className="w-full md:w-auto px-12 py-6 text-lg font-bold bg-brand-green-700 hover:bg-brand-green-800 text-white shadow-md disabled:bg-slate-200 disabled:text-slate-400"
+                className="w-full md:w-auto px-12 py-6 text-lg font-bold bg-brand-green-700 hover:bg-brand-green-800 text-white shadow-md disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer"
             >
               COMPARE PERIOD 1 AND PERIOD 2
             </Button>
@@ -416,15 +527,14 @@ function ComparePageContent() {
                     const isPositive = change > 0;
                     const absChange = Math.abs(change);
                     
-                    // Skip tiny floating point changes
                     if (absChange < 0.0001) return null;
-                    
+
                     return (
-                      <tr key={metric} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-800">{metric} {LAND_COVERS.includes(metric) ? '(%)' : ''}</td>
+                      <tr key={metric} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800">{metric}</td>
                         <td className="px-4 py-3 font-mono text-slate-600">{v1.toFixed(4)}</td>
                         <td className="px-4 py-3 font-mono text-slate-600">{v2.toFixed(4)}</td>
-                        <td className={`px-4 py-3 font-mono font-bold ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <td className={`px-4 py-3 font-mono font-bold ${isPositive ? 'text-emerald-600' : 'text-amber-600'}`}>
                           {isPositive ? '+' : ''}{change.toFixed(4)}
                         </td>
                       </tr>
@@ -434,59 +544,29 @@ function ComparePageContent() {
               </table>
             </div>
 
-            {/* GRAPHS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 border-t bg-white">
-              <div>
-                <h4 className="text-center font-bold text-slate-700 mb-4">Spectral Indices</h4>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={SPECTRAL_KEYS.map(metric => {
-                        const v1 = getVal(p1Data, metric);
-                        const v2 = getVal(p2Data, metric);
-                        if (v1 === null || v2 === null) return null;
-                        return { name: metric, "Period 1": Number(v1.toFixed(4)), "Period 2": Number(v2.toFixed(4)) };
-                      }).filter(Boolean)}
-                      margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                      <Bar dataKey="Period 1" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="Period 2" fill="#047857" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-center font-bold text-slate-700 mb-4">Land Cover (%)</h4>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={LAND_COVERS.map(metric => {
-                        const v1 = getVal(p1Data, metric);
-                        const v2 = getVal(p2Data, metric);
-                        if (v1 === null || v2 === null) return null;
-                        return { name: metric, "Period 1": Number(v1.toFixed(2)), "Period 2": Number(v2.toFixed(2)) };
-                      }).filter(Boolean)}
-                      margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                      <Bar dataKey="Period 1" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="Period 2" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+            {/* CHART */}
+            <div className="p-6 border-t bg-white">
+              <h4 className="text-base font-bold text-slate-800 mb-4">Metric Shift Visualization</h4>
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={SPECTRAL_KEYS.map(m => {
+                      const v1 = getVal(p1Data, m);
+                      const v2 = getVal(p2Data, m);
+                      return { name: m, 'Period 1': v1 !== null ? Number(v1.toFixed(3)) : 0, 'Period 2': v2 !== null ? Number(v2.toFixed(3)) : 0 };
+                    }).filter(d => d['Period 1'] !== 0 || d['Period 2'] !== 0)}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Period 1" fill="#64748b" />
+                    <Bar dataKey="Period 2" fill="#047857" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
-
           </CardContent>
         </Card>
       )}
@@ -496,7 +576,9 @@ function ComparePageContent() {
 
 export default function ComparePage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="w-8 h-8 animate-spin" /></div>}>
+    <Suspense fallback={
+      <div className="p-8 text-center text-slate-500 font-medium">Loading Compare Tool...</div>
+    }>
       <ComparePageContent />
     </Suspense>
   );

@@ -102,16 +102,7 @@ export default function HistoryPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto py-4 md:py-8 space-y-6">
-      {/* Page header */}
-      <div>
-        <h3 className="text-xl md:text-2xl font-bold text-brand-neutral-900">
-          {t('history.title')}
-        </h3>
-        <p className="text-sm text-brand-neutral-700 mt-1">
-          {t('history.subtitle')}
-        </p>
-      </div>
+    <div className="w-full py-4 px-4 md:px-6 space-y-6">
 
       {/* No history at all */}
       {allHistory.length === 0 ? (

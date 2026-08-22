@@ -514,17 +514,22 @@ def ai_analyze():
     Expects JSON: { analysis_result: {...}, question: "...", context: {...} }
     """
     data = request.get_json() or {}
-    analysis_context = data.get("analysis_result", {})
-    # Optionally combine with extra context if provided
-    extra_context = data.get("context", {})
-    if extra_context:
-        analysis_context.update(extra_context)
-        
+    
+    # Robustly assemble context dictionary from top-level fields, analysis_result, and context payload
+    analysis_context = {}
+    if isinstance(data.get("analysis_result"), dict):
+        analysis_context.update(data["analysis_result"])
+    if isinstance(data.get("context"), dict):
+        analysis_context.update(data["context"])
+    for k, v in data.items():
+        if k not in ["analysis_result", "context"]:
+            analysis_context[k] = v
+            
     question = data.get("question", "")
     
-    if not analysis_context:
-        return jsonify({"status": "error", "message": "No analysis context provided"}), 400
-        
+    # Log incoming request parameters for backend debugging
+    logger.info(f"AI Analyze query: question='{question}', context_keys={list(analysis_context.keys())}")
+    
     try:
         response_text = generate_ai_analysis(analysis_context, question)
         return jsonify({"status": "success", "analysis": response_text})

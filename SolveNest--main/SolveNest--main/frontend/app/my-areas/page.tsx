@@ -3,15 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Map, PlusCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { AreaCard } from '@/components/areas/area-card';
 import { areasService, SavedArea } from '@/services/areas-service';
+import { useTheme } from '@/lib/theme/theme-context';
 
 export default function MyAreasPage() {
   const router = useRouter();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+
   const [areas, setAreas] = useState<SavedArea[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -24,7 +27,7 @@ export default function MyAreasPage() {
         const saved = areasService.getSavedAreas();
         setAreas(saved);
         setIsLoading(false);
-      }, 300);
+      }, 200);
     } catch {
       setHasError(true);
       setIsLoading(false);
@@ -54,7 +57,7 @@ export default function MyAreasPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto py-8">
+      <div className="max-w-6xl mx-auto py-8 px-4">
         <LoadingState message="Loading your saved areas..." size="md" />
       </div>
     );
@@ -62,7 +65,7 @@ export default function MyAreasPage() {
 
   if (hasError) {
     return (
-      <div className="max-w-4xl mx-auto py-8">
+      <div className="max-w-6xl mx-auto py-8 px-4">
         <ErrorState
           title="Failed to load areas"
           message="Please try again."
@@ -73,38 +76,40 @@ export default function MyAreasPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-4 md:py-8 space-y-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="w-full py-4 px-4 md:px-6 space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4 border-slate-200 dark:border-slate-800">
         <div>
-          <h3 className="text-xl md:text-2xl font-bold text-brand-neutral-900">
-            My Areas
-          </h3>
-          <p className="text-sm text-brand-neutral-700 mt-1">
-            Manage your saved locations and analysis results.
+          <h1 className={`text-xl md:text-2xl font-black ${isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'}`}>
+            My Saved Areas
+          </h1>
+          <p className={`text-xs mt-1 ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+            Manage your saved locations, satellite metrics, and analysis reports.
           </p>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => router.push('/select-area')}
-          leftIcon={<PlusCircle className="h-4 w-4" />}
+        <button
+          type="button"
+          onClick={() => router.push('/explorer')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm ${
+            isLight ? 'bg-[#4C7A3D] hover:bg-[#3D6330]' : 'bg-[#14B8A6] hover:bg-[#0F766E]'
+          }`}
         >
-          Add New Area
-        </Button>
+          <PlusCircle className="h-4 w-4" />
+          <span>Add New Area</span>
+        </button>
       </div>
 
-      {/* Content */}
+      {/* Grid or Empty State */}
       {areas.length === 0 ? (
         <EmptyState
-          icon={<Map className="h-8 w-8 text-brand-neutral-300" />}
+          icon={<Map className="h-10 w-10 text-slate-400" />}
           title="No Areas Saved"
-          description="You haven't saved any locations yet. Add a new area to track satellite data over time."
+          description="You haven't saved any locations yet. Save an area from Map Explorer to track satellite data over time."
           actionText="Find an Area"
-          onAction={() => router.push('/select-area')}
+          onAction={() => router.push('/explorer')}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {areas.map(area => (
             <AreaCard
               key={area.id}

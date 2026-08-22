@@ -22,8 +22,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           
           // Variants
           {
-            // Primary: Restrained Green
-            "bg-brand-green-700 hover:bg-brand-green-800 text-white shadow-brand-sm rounded-brand-md": 
+            // Primary: Brand Teal
+            "bg-[#14B8A6] hover:bg-[#0F766E] text-white shadow-brand-sm rounded-brand-md": 
               variant === 'primary',
             // Secondary: Clean Neutral
             "border border-brand-neutral-200 bg-white hover:bg-brand-neutral-100 text-brand-neutral-900 shadow-brand-sm rounded-brand-md": 
@@ -38,7 +38,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             "bg-status-error-text hover:bg-red-700 text-white shadow-brand-sm rounded-brand-md": 
               variant === 'danger',
             // Link: Inline
-            "text-brand-green-700 hover:text-brand-green-800 hover:underline bg-transparent border-none p-0 shadow-none": 
+            "text-[#14B8A6] hover:text-[#0F766E] hover:underline bg-transparent border-none p-0 shadow-none": 
               variant === 'link',
           },
           

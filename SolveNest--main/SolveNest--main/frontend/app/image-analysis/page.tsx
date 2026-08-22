@@ -9,9 +9,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BackendAPI } from '@/lib/api-client';
+import { useTheme } from '@/lib/theme/theme-context';
 
 export default function ImageAnalysisPage() {
   const router = useRouter();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [dragOver, setDragOver] = useState(false);
@@ -198,22 +202,32 @@ export default function ImageAnalysisPage() {
     }
   };
 
-  return (
-    <div className="max-w-5xl mx-auto py-8 px-4 space-y-8">
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" size="sm" onClick={() => router.push('/')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f172a]">Image Analyzer</h1>
-          <p className="text-sm text-[#64748b]">Honest Visual & Multispectral Analysis</p>
-        </div>
-      </div>
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      if (updated.length === 0) {
+        setPreviewUrl(null);
+      } else if (updated.length === 1 && updated[0].type.startsWith('image/') && !updated[0].name.toLowerCase().endsWith('.tif') && !updated[0].name.toLowerCase().endsWith('.tiff')) {
+        const reader = new FileReader();
+        reader.onload = (e) => setPreviewUrl(e.target?.result as string);
+        reader.readAsDataURL(updated[0]);
+      }
+      return updated;
+    });
+  };
 
+  return (
+    <div className="w-full py-4 px-4 md:px-6 space-y-6">
       {selectedFiles.length === 0 ? (
         <div
-          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer ${
-            dragOver ? 'border-[#3b82f6] bg-[#eff6ff]' : 'border-[#cbd5e1] hover:border-[#94a3b8] hover:bg-[#f8fafc]'
+          className={`border-2 border-dashed rounded-2xl p-10 md:p-14 text-center transition-all cursor-pointer shadow-2xs ${
+            dragOver
+              ? isLight
+                ? 'border-[#4C7A3D] bg-[#4C7A3D]/10 text-[#2D3B27] scale-[1.005]'
+                : 'border-[#14B8A6] bg-[#14B8A6]/10 text-[#F1F5F9] scale-[1.005]'
+              : isLight
+              ? 'border-[#D8DCCF] bg-white hover:border-[#4C7A3D] hover:bg-[#FAFAF7]'
+              : 'border-[#1E293B] bg-[#0B1120] hover:border-[#14B8A6] hover:bg-[#131B2E]'
           }`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -228,35 +242,82 @@ export default function ImageAnalysisPage() {
             multiple
             onChange={(e) => e.target.files && handleFiles(e.target.files)}
           />
-          <div className="w-16 h-16 bg-[#f1f5f9] rounded-full flex items-center justify-center mx-auto mb-4">
-            <Layers className="h-8 w-8 text-[#64748b]" />
+          <div
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border transition-colors ${
+              dragOver
+                ? isLight
+                  ? 'bg-[#4C7A3D]/20 border-[#4C7A3D] text-[#4C7A3D]'
+                  : 'bg-[#14B8A6]/20 border-[#14B8A6] text-[#14B8A6]'
+                : isLight
+                ? 'bg-[#4C7A3D]/10 border-[#4C7A3D]/30 text-[#4C7A3D]'
+                : 'bg-[#14B8A6]/10 border-[#14B8A6]/30 text-[#14B8A6]'
+            }`}
+          >
+            <Layers className="h-8 w-8" />
           </div>
-          <h3 className="text-lg font-semibold text-[#0f172a] mb-2">Upload Sentinel-2 Bands or Image</h3>
-          <p className="text-sm text-[#64748b] mb-6">Select multiple GeoTIFF bands (B02, B03, B04, B08) or a single JPG/PNG</p>
-          <Button variant="secondary">Browse Files</Button>
+          <h3 className={`text-lg font-extrabold mb-1 ${isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'}`}>
+            {dragOver ? 'Drop files here to upload...' : 'Upload Sentinel-2 Bands or Image'}
+          </h3>
+          <p className={`text-xs mb-6 max-w-md mx-auto ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+            Drag & drop multiple GeoTIFF bands (B02, B03, B04, B08) or a single JPG/PNG file here
+          </p>
+          <Button
+            type="button"
+            className={`font-bold text-xs py-2.5 px-6 rounded-xl cursor-pointer shadow-xs text-white ${
+              isLight ? 'bg-[#4C7A3D] hover:bg-[#3D6330]' : 'bg-[#14B8A6] hover:bg-[#0F766E]'
+            }`}
+          >
+            Browse Files
+          </Button>
         </div>
       ) : (
         <div className="space-y-6">
           {previewUrl && (
-            <div className="relative h-64 md:h-96 w-full rounded-xl overflow-hidden border border-[#e2e8f0] bg-[#f8fafc]">
+            <div className="relative h-64 md:h-96 w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
               <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
             </div>
           )}
           
-          {selectedFiles.length > 0 && !previewUrl && (
-             <div className="p-4 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg">
-                <h4 className="font-semibold text-[#1e40af] mb-2 flex items-center gap-2">
-                  <Layers className="h-4 w-4" /> Selected Sentinel-2 bands
+          {selectedFiles.length > 0 && (
+            <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 uppercase tracking-wider">
+                  <Layers className="h-4 w-4" /> Selected Files ({selectedFiles.length})
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {selectedFiles.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-[#1e40af] bg-white p-2 rounded border border-[#bfdbfe]">
-                      <CheckCircle className="h-4 w-4 text-[#3b82f6]" />
-                      <span>{getBandName(f.name)}</span>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs font-bold text-[#4C7A3D] dark:text-[#14B8A6] hover:underline cursor-pointer"
+                >
+                  + Add More Files
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {selectedFiles.map((f, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between gap-2 text-xs font-medium bg-white dark:bg-[#0F172A] p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60 shadow-2xs"
+                  >
+                    <div className="flex items-center gap-2 truncate min-w-0">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                      <span className="truncate" title={f.name}>
+                        {f.name.toLowerCase().endsWith('.tif') || f.name.toLowerCase().endsWith('.tiff')
+                          ? getBandName(f.name)
+                          : f.name}
+                      </span>
                     </div>
-                  ))}
-                </div>
-             </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      className="text-slate-400 hover:text-red-500 p-1 rounded-md transition-colors cursor-pointer"
+                      title="Remove file"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="flex gap-3">

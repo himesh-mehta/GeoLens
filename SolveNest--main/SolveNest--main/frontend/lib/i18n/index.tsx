@@ -49,7 +49,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved === 'en' || saved === 'hi' || saved === 'mr') {
-      setLangState(saved);
+      setLangState(saved as LangCode);
+      document.documentElement.lang = saved;
     }
   }, []);
 
@@ -57,6 +58,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     setLangState(l);
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY, l);
+      document.documentElement.lang = l;
     }
   }, []);
 

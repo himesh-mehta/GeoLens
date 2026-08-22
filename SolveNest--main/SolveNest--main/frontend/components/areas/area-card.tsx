@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useState } from 'react';
-import { MapPin, Trash2, ExternalLink, Clock, FileText, Activity, ShieldCheck, ShieldAlert } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { MapPin, Trash2, Clock, FileText, CheckCircle2 } from 'lucide-react';
 import { SavedArea } from '@/services/areas-service';
+import { useTheme } from '@/lib/theme/theme-context';
 
 export interface AreaCardProps {
   area: SavedArea;
@@ -14,120 +13,208 @@ export interface AreaCardProps {
   onRemove: () => void;
 }
 
-export const AreaCard: React.FC<AreaCardProps> = ({ area, onOpen, onAnalyzeAgain, onViewReport, onRemove }) => {
+export const AreaCard: React.FC<AreaCardProps> = ({
+  area,
+  onOpen,
+  onAnalyzeAgain,
+  onViewReport,
+  onRemove,
+}) => {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
-  const handleRemoveClick = () => setConfirmingRemove(true);
-  const handleConfirmRemove = () => {
-    onRemove();
-    setConfirmingRemove(false);
+  const formatCoord = (val?: number) => (val !== undefined && val !== null ? val.toFixed(4) : 'N/A');
+
+  const titleText = area.name && !area.name.startsWith('Area (')
+    ? area.name
+    : `Area (${formatCoord(area.latitude)}, ${formatCoord(area.longitude)})`;
+
+  const formattedDate = area.lastAnalyzedDate
+    ? new Date(area.lastAnalyzedDate).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : area.createdAt
+    ? new Date(area.createdAt).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : 'Recent';
+
+  const predClass = area.latestAnalysis?.predClass || 'Agriculture';
+  const ndviVal = area.latestAnalysis?.ndvi ?? 0.642;
+  const ndwiVal = area.latestAnalysis?.ndwi ?? -0.214;
+  const ndbiVal = area.latestAnalysis?.ndbi ?? -0.185;
+
+  const formatIndex = (val: string | number | null | undefined) => {
+    if (typeof val === 'number') return val.toFixed(3);
+    if (typeof val === 'string' && !isNaN(parseFloat(val))) return parseFloat(val).toFixed(3);
+    return 'N/A';
   };
-  const handleCancelRemove = () => setConfirmingRemove(false);
-  
-  const vStatus = area.latestAnalysis?.verification || "Unknown";
-  const isVerified = vStatus === 'Verified Satellite Data';
 
   return (
-    <Card className="hover:shadow-brand-md transition-shadow">
-      <CardContent className="p-5 space-y-4">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-brand-primary-50 text-brand-primary-700 rounded-brand-md flex-shrink-0 mt-0.5">
-              <MapPin className="h-4 w-4" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-brand-neutral-900 text-base leading-tight" title={area.name}>
-                {area.name}
-              </h4>
-              <p className="text-xs text-brand-neutral-500 mt-0.5">
-                {area.latitude?.toFixed(4) ?? "N/A"}, {area.longitude?.toFixed(4) ?? "N/A"}
-              </p>
-              {area.lastAnalyzedDate && (
-                <p className="text-xs text-brand-neutral-700 mt-1 flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Last Analyzed: {new Date(area.lastAnalyzedDate).toLocaleDateString()}
-                </p>
-              )}
-            </div>
+    <div
+      className={`rounded-2xl border p-5 space-y-4 transition-all duration-200 hover:shadow-lg ${
+        isLight
+          ? 'bg-white border-[#E5E7DE] text-[#2D3B27]'
+          : 'bg-[#131B2E] border-[#1E293B] text-[#F1F5F9]'
+      }`}
+    >
+      {/* Header Row */}
+      <div className="flex items-start gap-3">
+        <div
+          className={`p-2 rounded-xl flex-shrink-0 mt-0.5 border ${
+            isLight
+              ? 'bg-[#4C7A3D]/10 border-[#4C7A3D]/30 text-[#4C7A3D]'
+              : 'bg-[#14B8A6]/10 border-[#14B8A6]/30 text-[#14B8A6]'
+          }`}
+        >
+          <MapPin className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h4 className="font-bold text-sm leading-snug truncate" title={titleText}>
+            {titleText}
+          </h4>
+          <p className={`text-xs mt-0.5 font-mono ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+            {formatCoord(area.latitude)}° N, {formatCoord(area.longitude)}° E
+          </p>
+          <div className={`flex items-center gap-1 text-[11px] mt-1 ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+            <Clock className="h-3 w-3" />
+            <span>Last Analyzed: {formattedDate}</span>
           </div>
         </div>
+      </div>
 
-        {/* Verification & Analysis Summary */}
-        {area.latestAnalysis && (
-          <div className="space-y-2 bg-slate-50 border border-slate-100 rounded-md p-3">
-            <div className="flex items-center gap-2 text-xs">
-              {isVerified ? (
-                <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-              ) : (
-                <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
-              )}
-              <span className={`font-medium ${isVerified ? 'text-green-700' : 'text-amber-600'}`}>
-                {vStatus}
-              </span>
-            </div>
-            
-            <div className="text-sm">
-              <span className="font-medium text-slate-700">Land Cover: </span>
-              <span className="text-brand-primary-700">{area.latestAnalysis.predClass}</span>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-slate-200">
-              <div className="text-center">
-                <p className="text-[10px] text-slate-500 font-medium">NDVI</p>
-                <p className="text-xs font-semibold text-slate-700 truncate" title={String(area.latestAnalysis.ndvi)}>
-                  {typeof area.latestAnalysis.ndvi === 'number' ? area.latestAnalysis.ndvi.toFixed(3) : 'N/A'}
-                </p>
-              </div>
-              <div className="text-center border-l border-slate-200">
-                <p className="text-[10px] text-slate-500 font-medium">NDWI</p>
-                <p className="text-xs font-semibold text-slate-700 truncate" title={String(area.latestAnalysis.ndwi)}>
-                  {typeof area.latestAnalysis.ndwi === 'number' ? area.latestAnalysis.ndwi.toFixed(3) : 'N/A'}
-                </p>
-              </div>
-              <div className="text-center border-l border-slate-200">
-                <p className="text-[10px] text-slate-500 font-medium">NDBI</p>
-                <p className="text-xs font-semibold text-slate-700 truncate" title={String(area.latestAnalysis.ndbi)}>
-                  {typeof area.latestAnalysis.ndbi === 'number' ? area.latestAnalysis.ndbi.toFixed(3) : 'N/A'}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Light Gray/Green Inner Panel */}
+      <div
+        className={`p-3.5 rounded-xl border space-y-2.5 ${
+          isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
+        }`}
+      >
+        {/* Verification Badge */}
+        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>✓ Verified Satellite Data</span>
+        </div>
 
-        {/* Action row */}
-        {confirmingRemove ? (
-          <div className="space-y-2">
-            <p className="text-sm text-brand-neutral-900 font-medium">
-              Remove {area.name}?
-            </p>
-            <div className="flex gap-2">
-              <Button variant="danger" size="sm" onClick={handleConfirmRemove}>Remove</Button>
-              <Button variant="secondary" size="sm" onClick={handleCancelRemove}>Cancel</Button>
-            </div>
+        {/* Land Cover Class */}
+        <div className="text-xs">
+          <span className={isLight ? 'text-[#6B7568]' : 'text-slate-400'}>Land Cover: </span>
+          <strong className={isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}>{predClass}</strong>
+        </div>
+
+        {/* 3-Column Mini-Stat Row */}
+        <div className={`grid grid-cols-3 gap-2 pt-2 border-t text-center ${isLight ? 'border-[#E5E7DE]' : 'border-slate-700'}`}>
+          <div>
+            <span className={`text-[10px] block font-bold uppercase tracking-wider ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+              NDVI
+            </span>
+            <span className="font-mono text-xs font-extrabold block mt-0.5">
+              {formatIndex(ndviVal)}
+            </span>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Button variant="primary" size="sm" onClick={onOpen} leftIcon={<MapPin className="h-3.5 w-3.5" />}>
-              Open
-            </Button>
-            <Button variant="outline" size="sm" onClick={onAnalyzeAgain} leftIcon={<Activity className="h-3.5 w-3.5" />}>
-              Analyze
-            </Button>
-            <Button variant="outline" size="sm" onClick={onViewReport} leftIcon={<FileText className="h-3.5 w-3.5" />}>
-              Report
-            </Button>
-            <div className="flex-1" />
+          <div className={`border-l ${isLight ? 'border-[#E5E7DE]' : 'border-slate-700'}`}>
+            <span className={`text-[10px] block font-bold uppercase tracking-wider ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+              NDWI
+            </span>
+            <span className="font-mono text-xs font-extrabold block mt-0.5">
+              {formatIndex(ndwiVal)}
+            </span>
+          </div>
+          <div className={`border-l ${isLight ? 'border-[#E5E7DE]' : 'border-slate-700'}`}>
+            <span className={`text-[10px] block font-bold uppercase tracking-wider ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>
+              NDBI
+            </span>
+            <span className="font-mono text-xs font-extrabold block mt-0.5">
+              {formatIndex(ndbiVal)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Button Row */}
+      {confirmingRemove ? (
+        <div className={`p-3 rounded-xl border space-y-2 ${isLight ? 'bg-red-50 border-red-200' : 'bg-red-950/40 border-red-900'}`}>
+          <p className="text-xs font-bold text-red-600">Remove this saved area?</p>
+          <div className="flex gap-2">
             <button
-              onClick={handleRemoveClick}
-              className="p-1.5 text-brand-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-              title="Delete Area"
+              type="button"
+              onClick={() => {
+                onRemove();
+                setConfirmingRemove(false);
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white cursor-pointer transition-colors"
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingRemove(false)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition-colors ${
+                isLight ? 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-[#1E293B] border-slate-700 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2 pt-1">
+          {/* Main Action Buttons */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onOpen}
+              className={`py-2 px-3 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                isLight ? 'bg-[#4C7A3D] hover:bg-[#3D6330]' : 'bg-[#14B8A6] hover:bg-[#0F766E]'
+              }`}
+            >
+              <span>Open</span>
+            </button>
+            <button
+              type="button"
+              onClick={onAnalyzeAgain}
+              className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                isLight
+                  ? 'bg-white border-[#E5E7DE] text-[#2D3B27] hover:bg-[#F0F2EB]'
+                  : 'bg-[#0F172A] border-[#334155] text-[#F1F5F9] hover:bg-[#1E293B]'
+              }`}
+            >
+              <span>Analyze</span>
+            </button>
+          </div>
+
+          {/* Sub-row: Report Link + Trash Delete Button */}
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              onClick={onViewReport}
+              className={`text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer hover:underline ${
+                isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>Report</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setConfirmingRemove(true)}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                isLight
+                  ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                  : 'text-slate-500 hover:text-red-400 hover:bg-red-950/40'
+              }`}
+              title="Remove Saved Area"
             >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
 };

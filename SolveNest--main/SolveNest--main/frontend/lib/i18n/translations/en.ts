@@ -32,7 +32,7 @@ export const en = {
   },
 
   home: {
-    welcome: 'Welcome to SolveNest',
+    welcome: 'Welcome to GeoLens',
     tagline: 'Understand what is changing in your area using satellite imagery. No technical knowledge required.',
     exploreTitle: 'Explore your area',
     selectAreaTitle: 'Select an Area',
@@ -43,6 +43,19 @@ export const en = {
     uploadBtn: 'Upload files',
     recentActivity: 'Recent activity',
     viewAllHistory: 'View all history',
+    statsIndices: '26 Spectral Indices',
+    statsSatellite: 'Sentinel-2 Satellite Data',
+    statsEngine: 'Powered by Google Earth Engine',
+    statsLanguages: '3 Languages Supported',
+    featureGridHeading: 'What GeoLens Can Do',
+    feat1Title: 'Land Cover Classification',
+    feat1Desc: 'Identify vegetation, water, built-up areas, agriculture, and barren land with AI-powered analysis.',
+    feat2Title: 'Multi-Temporal Comparison',
+    feat2Desc: 'Compare any two time periods to detect changes in land use and vegetation health.',
+    feat3Title: 'AI-Powered Insights',
+    feat3Desc: 'Ask questions in plain language and get scientific explanations from our GPT-OSS assistant.',
+    feat4Title: 'Multilingual Support',
+    feat4Desc: 'Available in English, Hindi, and Marathi, making Earth observation accessible to everyone.',
   },
 
   selectArea: {
@@ -183,6 +196,20 @@ export const en = {
   help: {
     title: 'Help & Frequently Asked Questions',
     subtitle: 'If you are new to Earth Observation or monitoring satellite imagery, read these simple questions to get started.',
+    gettingStartedTitle: 'Getting Started',
+    gettingStartedSub: 'Follow these 4 simple steps to analyze any area on Earth',
+    step1Title: 'Select a Location',
+    step1Desc: 'Use the map explorer to search by city/address or click directly on any coordinate.',
+    step2Title: 'Configure Analysis',
+    step2Desc: 'Choose your desired Sentinel-2 date range and set the cloud coverage threshold.',
+    step3Title: 'Analyze Satellite Data',
+    step3Desc: "Click 'Analyze Area' to generate instant land-cover predictions & 11+ spectral indices.",
+    step4Title: 'Ask AI Assistant',
+    step4Desc: 'Open the floating bot widget to get plain-language interpretations and answers.',
+    faqSectionTitle: 'Frequently Asked Questions',
+    stillNeedHelpTitle: 'Still need help?',
+    stillNeedHelpSub: 'Have specific questions or feedback about satellite datasets? Reach out anytime.',
+    chatWithAiBtn: 'Chat with AI Assistant',
   },
 
   assistant: {
@@ -212,6 +239,11 @@ export const en = {
     removeConfirm: 'Remove {name} from My Areas?',
     cancel: 'Cancel',
     lastChecked: 'Last checked',
+  },
+
+  sidebarCard: {
+    heading: 'Earth Observation for Everyone',
+    subtext: 'Easy to use. Powerful insights.',
   },
 } as const;
 
