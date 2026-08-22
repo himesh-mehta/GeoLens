@@ -49,6 +49,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     { key: 'nav.myAreas', name: t('nav.myAreas'), href: '/my-areas', icon: Map },
     { key: 'nav.compare', name: t('nav.compare'), href: '/compare', icon: Columns },
     { key: 'nav.imageAnalysis', name: 'Image Analysis', href: '/image-analysis', icon: Upload },
+    { key: 'nav.shapefileAnalysis', name: 'Shapefile Analysis', href: '/shapefile-analysis', icon: Map },
     { key: 'nav.history', name: t('nav.history'), href: '/history', icon: History },
     { key: 'nav.reports', name: 'Reports', href: '/reports', icon: FileText },
     { key: 'nav.help', name: t('nav.help'), href: '/help', icon: HelpCircle },

@@ -161,5 +161,27 @@ export const BackendAPI = {
     fetchFromBackend('/api/feedback', {
       method: 'POST',
       body: JSON.stringify({ point_id: pointId, verdict, notes })
-    })
+    }),
+    
+  uploadShapefile: async (file: File, p1Start: string, p1End: string, p2Start: string, p2End: string, cloudThreshold: number, geotiff?: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (geotiff) formData.append('geotiff', geotiff);
+    formData.append('period1_start', p1Start);
+    formData.append('period1_end', p1End);
+    formData.append('period2_start', p2Start);
+    formData.append('period2_end', p2End);
+    formData.append('cloud_threshold', cloudThreshold.toString());
+    
+    const res = await fetch(`${API_BASE}/api/shapefile/analyze`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) throw new Error(`Backend error: ${res.status}`);
+    return res.json();
+  },
+  
+  getShapefileStatus: (jobId: string) => fetchFromBackend(`/api/shapefile/status/${jobId}`),
+  
+  getShapefileResults: (jobId: string) => fetchFromBackend(`/api/shapefile/results/${jobId}`)
 };

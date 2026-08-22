@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polygon, Circle, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polygon, Circle, Polyline, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Check, Grid, Info, Plus, Minus } from 'lucide-react';
@@ -30,6 +30,8 @@ export interface MapProps {
   layerMode?: 'map' | 'satellite';
   initialFeature?: LandCoverFeature;
   showFeatureControls?: boolean;
+  geoJson?: any;
+  boundingBox?: number[][];
 }
 
 interface FeatureConfig {
@@ -150,12 +152,23 @@ function CustomZoomControl() {
 }
 
 // Map camera controller to handle smooth zoom & flyTo panning on location changes
-function MapCameraController({ center, selectedPoint }: { center?: [number, number] | null; selectedPoint?: [number, number] | null }) {
+function MapCameraController({ center, selectedPoint, boundingBox }: { center?: [number, number] | null; selectedPoint?: [number, number] | null; boundingBox?: number[][] }) {
   const map = useMapEvents({});
   const hasMountedRef = useRef(false);
   const lastPointRef = useRef<[number, number] | null>(null);
 
   useEffect(() => {
+    // If we have a bounding box (e.g. from Shapefile Analysis), fit bounds to it
+    if (boundingBox && boundingBox.length > 0) {
+      try {
+        const bounds = L.latLngBounds(boundingBox.map(c => [c[1], c[0]])); // Assuming GeoJSON [lon, lat] format
+        map.fitBounds(bounds, { padding: [50, 50], duration: 1.2 });
+      } catch (e) {
+        console.warn("Invalid bounding box", e);
+      }
+      return;
+    }
+
     // On first mount, fly to the initial center (or selectedPoint if available)
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
@@ -176,7 +189,7 @@ function MapCameraController({ center, selectedPoint }: { center?: [number, numb
         lastPointRef.current = selectedPoint;
       }
     }
-  }, [selectedPoint, center, map]);
+  }, [selectedPoint, center, boundingBox, map]);
 
   return null;
 }
@@ -308,6 +321,8 @@ export default function MapComponent({
   layerMode = 'map',
   initialFeature = 'all',
   showFeatureControls = true,
+  geoJson,
+  boundingBox,
 }: MapProps) {
   const { theme } = useTheme();
   const { t, lang } = useTranslation();
@@ -514,7 +529,7 @@ export default function MapComponent({
         style={{ height: '100%', width: '100%', zIndex: 10 }}
       >
         <MapAutoResizer />
-        <MapCameraController center={center} selectedPoint={selectedPoint} />
+        <MapCameraController center={center} selectedPoint={selectedPoint} boundingBox={boundingBox} />
         <CustomZoomControl />
 
         {activeBaseLayer === 'map' && (
@@ -594,6 +609,19 @@ export default function MapComponent({
             ))}
           </>
         )}
+        {/* GeoJSON layer for shapefiles */}
+        {geoJson && (
+          <GeoJSON 
+            data={geoJson} 
+            style={{
+              color: '#3B82F6',
+              weight: 2,
+              fillColor: '#3B82F6',
+              fillOpacity: 0.1
+            }} 
+          />
+        )}
+
       </MapContainer>
     </div>
   );
