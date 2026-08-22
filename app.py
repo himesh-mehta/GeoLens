@@ -58,6 +58,7 @@ except ImportError:
 from data_sources.sentinel_source import SentinelSource
 from data_sources.isro_source import ISRODataSource
 from ml_layer.model_service import ModelService
+from ml_layer.shapefile_service import ShapefileService
 from vision_layer.image_generator import EOImageGenerator
 from vision_layer.visual_extractor import EOVisionExtractor
 from vision_layer.vision_evaluator import EOVisionEvaluator
@@ -81,6 +82,7 @@ def handle_options(path):
 
 # ── Service Initialization ────────────────────────────────────────────────────
 ml_service     = ModelService()
+shapefile_service = ShapefileService(gee_source=ml_service.gee_source)
 image_gen      = EOImageGenerator(patch_size=256)
 vision_ext     = EOVisionExtractor()
 vision_eval    = EOVisionEvaluator()
@@ -966,6 +968,87 @@ def get_comparison_status(comp_id: str):
         ]
     })
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SHAPEFILE ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════════
+import tempfile
+import werkzeug.utils
+
+@app.route("/api/shapefile/analyze", methods=["POST"])
+def analyze_shapefile():
+    if 'file' not in request.files:
+        return jsonify({"status": "error", "message": "No shapefile provided"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"status": "error", "message": "No selected file"}), 400
+        
+    p1_start = request.form.get("period1_start", "2020-01-01")
+    p1_end = request.form.get("period1_end", "2020-12-31")
+    p2_start = request.form.get("period2_start", "2024-01-01")
+    p2_end = request.form.get("period2_end", "2024-12-31")
+    cloud_threshold = int(request.form.get("cloud_threshold", 20))
+    
+    # Save the file securely to a temp location
+    temp_dir = tempfile.mkdtemp()
+    filename = werkzeug.utils.secure_filename(file.filename)
+    zip_path = os.path.join(temp_dir, filename)
+    file.save(zip_path)
+    
+    # Check for optional GeoTIFF
+    geotiff_metadata = None
+    tiff_path = None
+    if 'geotiff' in request.files:
+        geotiff_file = request.files['geotiff']
+        if geotiff_file.filename != '':
+            try:
+                import rasterio
+                tiff_name = werkzeug.utils.secure_filename(geotiff_file.filename)
+                tiff_path = os.path.join(temp_dir, tiff_name)
+                geotiff_file.save(tiff_path)
+                with rasterio.open(tiff_path) as src:
+                    geotiff_metadata = {
+                        "filename": tiff_name,
+                        "crs": src.crs.to_string() if src.crs else "Unknown",
+                        "width": src.width,
+                        "height": src.height,
+                        "count": src.count,
+                        "dtypes": src.dtypes,
+                        "nodata": src.nodata,
+                        "bounds": [src.bounds.left, src.bounds.bottom, src.bounds.right, src.bounds.top]
+                    }
+            except Exception as e:
+                logger.error(f"Failed to read GeoTIFF: {e}")
+                tiff_path = None
+                
+    # Start analysis
+    job_id = shapefile_service.start_analysis(
+        zip_path, p1_start, p1_end, p2_start, p2_end, cloud_threshold, tiff_path
+    )
+    
+    # If we have geotiff metadata, store it with the job (hacky way since start_analysis doesn't take it)
+    if geotiff_metadata:
+        shapefile_service.jobs[job_id]["geotiff_metadata"] = geotiff_metadata
+        
+    return jsonify({
+        "jobId": job_id,
+        "status": "running"
+    })
+
+@app.route("/api/shapefile/status/<job_id>", methods=["GET"])
+def get_shapefile_status(job_id):
+    return jsonify(shapefile_service.get_status(job_id))
+
+@app.route("/api/shapefile/results/<job_id>", methods=["GET"])
+def get_shapefile_results(job_id):
+    res = shapefile_service.get_results(job_id)
+    # Inject geotiff metadata if it exists
+    if job_id in shapefile_service.jobs and "geotiff_metadata" in shapefile_service.jobs[job_id]:
+        if "summary" not in res:
+            res["summary"] = {} # ensure it exists
+        res["geotiff_metadata"] = shapefile_service.jobs[job_id]["geotiff_metadata"]
+    return jsonify(res)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STARTUP
