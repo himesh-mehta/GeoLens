@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Mail, Bot, Compass, HelpCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ChevronDown, ChevronUp, Mail, Compass, HelpCircle } from 'lucide-react';
 import { useTranslation, LangCode } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme/theme-context';
+import { AIAvatar } from '@/components/ui/ai-avatar';
 
 interface FAQ {
   question: Record<LangCode, string>;
@@ -11,6 +13,7 @@ interface FAQ {
 }
 
 export default function HelpPage() {
+  const router = useRouter();
   const { t, lang } = useTranslation();
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -274,14 +277,13 @@ export default function HelpPage() {
         <button
           type="button"
           onClick={() => {
-            const botBtn = document.querySelector('[title="AI Assistant"]') as HTMLButtonElement;
-            if (botBtn) botBtn.click();
+            router.push('/explorer?open_ai=true');
           }}
-          className={`py-2.5 px-5 rounded-xl text-xs font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm ${
+          className={`py-2.5 px-5 rounded-full text-xs font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-2.5 shadow-md hover:scale-105 active:scale-95 ${
             isLight ? 'bg-[#4C7A3D] hover:bg-[#3D6330]' : 'bg-[#14B8A6] hover:bg-[#0F766E]'
           }`}
         >
-          <Bot className="h-4 w-4" />
+          <AIAvatar size="xs" className="w-5 h-5 flex-shrink-0 border-white/40" />
           <span>{t('help.chatWithAiBtn') || 'Chat with AI Assistant'}</span>
         </button>
       </div>

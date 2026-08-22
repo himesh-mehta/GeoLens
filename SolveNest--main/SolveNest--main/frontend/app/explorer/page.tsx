@@ -150,6 +150,10 @@ export default function ExplorerPage() {
       const lon = params.get('lon');
       const name = params.get('name');
       const autoAnalyze = params.get('auto_analyze');
+      const openAi = params.get('open_ai');
+      if (openAi === 'true') {
+        setAssistantOpen(true);
+      }
       if (lat && lon) {
         const latF = parseFloat(lat);
         const lonF = parseFloat(lon);

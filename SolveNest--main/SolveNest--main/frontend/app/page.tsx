@@ -329,16 +329,18 @@ export default function HomePage() {
           {features.map((feat, idx) => (
             <div
               key={idx}
-              className={`p-5 rounded-2xl border transition-all space-y-3 shadow-2xs ${
+              className={`group p-5 rounded-2xl border transition-all duration-300 space-y-3 shadow-2xs ${
                 isLight
-                  ? 'bg-white border-[#E5E7DE] hover:border-[#4C7A3D]/50'
-                  : 'bg-[#0F172A] border-[#1E293B] hover:border-[#14B8A6]/50'
+                  ? 'bg-white border-[#E5E7DE] hover:border-[#4C7A3D]/40 hover:bg-[#FAFAF7] hover:shadow-md hover:-translate-y-1'
+                  : 'bg-[#0F172A] border-[#1E293B] hover:border-[#14B8A6]/40 hover:bg-[#131B2E] hover:shadow-md hover:-translate-y-1'
               }`}
             >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${feat.color}`}>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-transform duration-300 group-hover:scale-105 ${feat.color}`}>
                 {feat.icon}
               </div>
-              <h4 className={`text-sm font-extrabold ${isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'}`}>
+              <h4 className={`text-sm font-extrabold transition-colors ${
+                isLight ? 'text-[#2D3B27] group-hover:text-[#4C7A3D]' : 'text-[#F1F5F9] group-hover:text-[#14B8A6]'
+              }`}>
                 {feat.title}
               </h4>
               <p className={`text-xs leading-relaxed ${isLight ? 'text-[#6B7568]' : 'text-slate-400'}`}>

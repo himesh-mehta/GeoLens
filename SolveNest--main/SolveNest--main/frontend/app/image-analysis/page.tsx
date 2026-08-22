@@ -279,15 +279,21 @@ export default function ImageAnalysisPage() {
           )}
           
           {selectedFiles.length > 0 && (
-            <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl">
+            <div className={`p-4 rounded-2xl border ${
+              isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#131B2E] border-[#1E293B]'
+            }`}>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-bold text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 uppercase tracking-wider">
-                  <Layers className="h-4 w-4" /> Selected Files ({selectedFiles.length})
+                <h4 className={`font-bold text-xs flex items-center gap-2 uppercase tracking-wider ${
+                  isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'
+                }`}>
+                  <Layers className={`h-4 w-4 ${isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}`} /> SELECTED FILES ({selectedFiles.length})
                 </h4>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="text-xs font-bold text-[#4C7A3D] dark:text-[#14B8A6] hover:underline cursor-pointer"
+                  className={`text-xs font-bold transition-colors hover:underline cursor-pointer ${
+                    isLight ? 'text-[#4C7A3D] hover:text-[#3D6330]' : 'text-[#14B8A6] hover:text-[#0D9488]'
+                  }`}
                 >
                   + Add More Files
                 </button>
@@ -296,20 +302,40 @@ export default function ImageAnalysisPage() {
                 {selectedFiles.map((f, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between gap-2 text-xs font-medium bg-white dark:bg-[#0F172A] p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60 shadow-2xs"
+                    className={`flex items-center justify-between gap-2.5 text-xs font-medium p-3 rounded-xl border shadow-2xs transition-colors ${
+                      isLight
+                        ? 'bg-white border-[#E5E7DE]'
+                        : 'bg-[#0F172A] border-[#1E293B]'
+                    }`}
                   >
-                    <div className="flex items-center gap-2 truncate min-w-0">
-                      <CheckCircle className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                      <span className="truncate" title={f.name}>
-                        {f.name.toLowerCase().endsWith('.tif') || f.name.toLowerCase().endsWith('.tiff')
-                          ? getBandName(f.name)
-                          : f.name}
-                      </span>
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <CheckCircle className={`h-4 w-4 flex-shrink-0 ${
+                        isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'
+                      }`} />
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className={`truncate font-semibold text-xs ${
+                          isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'
+                        }`} title={f.name}>
+                          {f.name}
+                          {(f.name.toLowerCase().endsWith('.tif') || f.name.toLowerCase().endsWith('.tiff')) && getBandName(f.name) !== 'Unknown Band'
+                            ? ` (${getBandName(f.name)})`
+                            : ''}
+                        </span>
+                        <span className={`text-[11px] font-medium mt-0.5 ${
+                          isLight ? 'text-[#6B7568]' : 'text-slate-400'
+                        }`}>
+                          {(f.size / (1024 * 1024)).toFixed(2)} MB · {f.name.split('.').pop()?.toUpperCase() || 'FILE'}
+                        </span>
+                      </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => removeFile(i)}
-                      className="text-slate-400 hover:text-red-500 p-1 rounded-md transition-colors cursor-pointer"
+                      className={`p-1 rounded-md transition-colors cursor-pointer flex-shrink-0 text-base font-bold leading-none ${
+                        isLight
+                          ? 'text-slate-400 hover:text-red-600 hover:bg-red-50'
+                          : 'text-slate-400 hover:text-red-400 hover:bg-red-950/40'
+                      }`}
                       title="Remove file"
                     >
                       ×
@@ -321,23 +347,43 @@ export default function ImageAnalysisPage() {
           )}
 
           <div className="flex gap-3">
-            <Button variant="primary" size="lg" className="bg-[#10b981] hover:bg-[#059669] text-white flex-1 relative overflow-hidden" onClick={handleAnalyze} disabled={isAnalyzing}>
+            <Button
+              type="button"
+              className={`flex-1 relative overflow-hidden font-bold text-sm py-3 px-6 rounded-xl cursor-pointer shadow-xs text-white transition-colors ${
+                isLight ? 'bg-[#4C7A3D] hover:bg-[#3D6330]' : 'bg-[#14B8A6] hover:bg-[#0F766E]'
+              }`}
+              onClick={handleAnalyze}
+              disabled={isAnalyzing}
+            >
               {isAnalyzing && (
-                <div 
-                  className="absolute left-0 top-0 bottom-0 bg-[#047857] transition-all duration-300"
+                <div
+                  className={`absolute left-0 top-0 bottom-0 transition-all duration-300 ${
+                    isLight ? 'bg-[#3D6330]' : 'bg-[#0F766E]'
+                  }`}
                   style={{ width: `${progressPercent}%` }}
                 />
               )}
-              <span className="relative flex items-center gap-2">
+              <span className="relative flex items-center justify-center gap-2">
                 {isAnalyzing ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> 
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     {progressText} ({progressPercent}%)
                   </>
                 ) : 'Analyze Image'}
               </span>
             </Button>
-            <Button variant="outline" size="lg" onClick={() => { setSelectedFiles([]); setPreviewUrl(null); setResult(null); setError(null); setAiResult(null); }}>Clear</Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`font-bold text-sm py-3 px-6 rounded-xl transition-colors cursor-pointer border ${
+                isLight
+                  ? 'bg-white border-[#E5E7DE] text-[#2D3B27] hover:bg-[#FAFAF7]'
+                  : 'bg-[#0F172A] border-[#1E293B] text-[#F1F5F9] hover:bg-[#1E293B]'
+              }`}
+              onClick={() => { setSelectedFiles([]); setPreviewUrl(null); setResult(null); setError(null); setAiResult(null); }}
+            >
+              Clear
+            </Button>
           </div>
 
           {error && (
