@@ -408,3 +408,101 @@ class EOVisionExtractor:
             return {"success": False, "error": str(e)}
         except Exception as e:
             return {"success": False, "error": f"Failed to process image: {str(e)}"}
+
+    def inspect_single_geotiff(self, filename: str, file_bytes: bytes) -> Tuple[str, Dict[str, Any]]:
+        """
+        Inspects embedded GeoTIFF metadata / filename pattern to detect Sentinel-2 band.
+        Order of preference:
+        1. Filename pattern matching (B01..B12, B8A, B1..B12, alias names like RED, GREEN, BLUE, NIR, SWIR)
+        2. GeoTIFF metadata / tags inspection using rasterio (wavelength, descriptions, colorinterp)
+        3. If both fail -> "UNKNOWN"
+        """
+        import re
+        upper_name = filename.upper()
+
+        # 1. Filename Pattern Matching
+        patterns = [
+            (r'[\._\-]B8A[\._\-]', "B8A"),
+            (r'[\._\-]B0?1[\._\-]', "B01"),
+            (r'[\._\-]B0?2[\._\-]', "B02"),
+            (r'[\._\-]B0?3[\._\-]', "B03"),
+            (r'[\._\-]B0?4[\._\-]', "B04"),
+            (r'[\._\-]B0?5[\._\-]', "B05"),
+            (r'[\._\-]B0?6[\._\-]', "B06"),
+            (r'[\._\-]B0?7[\._\-]', "B07"),
+            (r'[\._\-]B0?8[\._\-]', "B08"),
+            (r'[\._\-]B0?9[\._\-]', "B09"),
+            (r'[\._\-]B11[\._\-]', "B11"),
+            (r'[\._\-]B12[\._\-]', "B12"),
+            (r'B8A(?=\.\w+$)', "B8A"),
+            (r'B0?1(?=\.\w+$)', "B01"),
+            (r'B0?2(?=\.\w+$)', "B02"),
+            (r'B0?3(?=\.\w+$)', "B03"),
+            (r'B0?4(?=\.\w+$)', "B04"),
+            (r'B0?5(?=\.\w+$)', "B05"),
+            (r'B0?6(?=\.\w+$)', "B06"),
+            (r'B0?7(?=\.\w+$)', "B07"),
+            (r'B0?8(?=\.\w+$)', "B08"),
+            (r'B0?9(?=\.\w+$)', "B09"),
+            (r'B11(?=\.\w+$)', "B11"),
+            (r'B12(?=\.\w+$)', "B12"),
+            (r'\bB8A\b', "B8A"),
+            (r'\bB01\b', "B01"), (r'\bB02\b', "B02"), (r'\bB03\b', "B03"), (r'\bB04\b', "B04"),
+            (r'\bB05\b', "B05"), (r'\bB06\b', "B06"), (r'\bB07\b', "B07"), (r'\bB08\b', "B08"),
+            (r'\bB09\b', "B09"), (r'\bB11\b', "B11"), (r'\bB12\b', "B12"),
+        ]
+
+        for pat, band_code in patterns:
+            if re.search(pat, upper_name):
+                return band_code, {"detection_source": "filename_pattern", "pattern": pat}
+
+        if "SWIR1" in upper_name or "SWIR-1" in upper_name: return "B11", {"detection_source": "filename_alias"}
+        if "SWIR2" in upper_name or "SWIR-2" in upper_name: return "B12", {"detection_source": "filename_alias"}
+        if "NIR" in upper_name: return "B08", {"detection_source": "filename_alias"}
+        if "REDEDGE" in upper_name or "RED_EDGE" in upper_name: return "B05", {"detection_source": "filename_alias"}
+
+        # 2. Embedded GeoTIFF Metadata Inspection via rasterio
+        try:
+            import rasterio
+            from rasterio.io import MemoryFile
+            with MemoryFile(file_bytes) as memfile:
+                with memfile.open() as src:
+                    meta_summary = {
+                        "width": src.width,
+                        "height": src.height,
+                        "bands": src.count,
+                        "crs": str(src.crs) if src.crs else None,
+                        "driver": src.driver,
+                        "tags": src.tags()
+                    }
+                    tags = src.tags()
+                    descriptions = src.descriptions
+                    
+                    tag_str = str(tags).upper() + str(descriptions).upper()
+                    
+                    for b_code in ["B8A", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B11", "B12"]:
+                        if b_code in tag_str:
+                            return b_code, {"detection_source": "embedded_metadata_tags", "metadata": meta_summary}
+                    
+                    for k, v in tags.items():
+                        if "WAVELENGTH" in k.upper():
+                            try:
+                                wl = float(re.sub(r'[^\d\.]', '', str(v)))
+                                if 430 <= wl <= 455: return "B01", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 460 <= wl <= 520: return "B02", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 530 <= wl <= 590: return "B03", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 630 <= wl <= 690: return "B04", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 700 <= wl <= 720: return "B05", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 730 <= wl <= 750: return "B06", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 770 <= wl <= 795: return "B07", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 800 <= wl <= 880: return "B08", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 930 <= wl <= 960: return "B09", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 1550 <= wl <= 1750: return "B11", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                                if 2050 <= wl <= 2300: return "B12", {"detection_source": "wavelength_metadata", "wavelength_nm": wl}
+                            except ValueError:
+                                pass
+
+                    return "UNKNOWN", {"detection_source": "metadata_inspected_unrecognized", "metadata": meta_summary}
+        except Exception as e:
+            return "UNKNOWN", {"detection_source": "inspection_fallback", "error": str(e)}
+

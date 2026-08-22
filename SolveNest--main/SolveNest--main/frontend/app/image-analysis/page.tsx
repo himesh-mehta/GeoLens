@@ -11,6 +11,85 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BackendAPI } from '@/lib/api-client';
 import { useTheme } from '@/lib/theme/theme-context';
 
+export interface BandInfo {
+  code: string;
+  name: string;
+  spectrum: string;
+  badgeBgLight: string;
+  badgeTextLight: string;
+  badgeBorderLight: string;
+  badgeBgDark: string;
+  badgeTextDark: string;
+  badgeBorderDark: string;
+  iconEmoji: string;
+}
+
+export const SENTINEL2_BANDS: Record<string, BandInfo> = {
+  B01: { code: 'B01', name: 'Coastal Aerosol', spectrum: '443 nm', badgeBgLight: 'bg-cyan-50', badgeTextLight: 'text-cyan-800', badgeBorderLight: 'border-cyan-200', badgeBgDark: 'bg-cyan-950/60', badgeTextDark: 'text-cyan-300', badgeBorderDark: 'border-cyan-800/60', iconEmoji: '🌊' },
+  B02: { code: 'B02', name: 'Blue', spectrum: '490 nm', badgeBgLight: 'bg-blue-50', badgeTextLight: 'text-blue-800', badgeBorderLight: 'border-blue-200', badgeBgDark: 'bg-blue-950/60', badgeTextDark: 'text-blue-300', badgeBorderDark: 'border-blue-800/60', iconEmoji: '🔵' },
+  B03: { code: 'B03', name: 'Green', spectrum: '560 nm', badgeBgLight: 'bg-emerald-50', badgeTextLight: 'text-emerald-800', badgeBorderLight: 'border-emerald-200', badgeBgDark: 'bg-emerald-950/60', badgeTextDark: 'text-emerald-300', badgeBorderDark: 'border-emerald-800/60', iconEmoji: '🟢' },
+  B04: { code: 'B04', name: 'Red', spectrum: '665 nm', badgeBgLight: 'bg-rose-50', badgeTextLight: 'text-rose-800', badgeBorderLight: 'border-rose-200', badgeBgDark: 'bg-rose-950/60', badgeTextDark: 'text-rose-300', badgeBorderDark: 'border-rose-800/60', iconEmoji: '🔴' },
+  B05: { code: 'B05', name: 'Red Edge 1', spectrum: '705 nm', badgeBgLight: 'bg-amber-50', badgeTextLight: 'text-amber-800', badgeBorderLight: 'border-amber-200', badgeBgDark: 'bg-amber-950/60', badgeTextDark: 'text-amber-300', badgeBorderDark: 'border-amber-800/60', iconEmoji: '🔻' },
+  B06: { code: 'B06', name: 'Red Edge 2', spectrum: '740 nm', badgeBgLight: 'bg-amber-50', badgeTextLight: 'text-amber-800', badgeBorderLight: 'border-amber-200', badgeBgDark: 'bg-amber-950/60', badgeTextDark: 'text-amber-300', badgeBorderDark: 'border-amber-800/60', iconEmoji: '🔻' },
+  B07: { code: 'B07', name: 'Red Edge 3', spectrum: '783 nm', badgeBgLight: 'bg-amber-50', badgeTextLight: 'text-amber-800', badgeBorderLight: 'border-amber-200', badgeBgDark: 'bg-amber-950/60', badgeTextDark: 'text-amber-300', badgeBorderDark: 'border-amber-800/60', iconEmoji: '🔻' },
+  B08: { code: 'B08', name: 'NIR', spectrum: '842 nm', badgeBgLight: 'bg-purple-50', badgeTextLight: 'text-purple-800', badgeBorderLight: 'border-purple-200', badgeBgDark: 'bg-purple-950/60', badgeTextDark: 'text-purple-300', badgeBorderDark: 'border-purple-800/60', iconEmoji: '🟣' },
+  B8A: { code: 'B8A', name: 'Narrow NIR', spectrum: '865 nm', badgeBgLight: 'bg-purple-50', badgeTextLight: 'text-purple-800', badgeBorderLight: 'border-purple-200', badgeBgDark: 'bg-purple-950/60', badgeTextDark: 'text-purple-300', badgeBorderDark: 'border-purple-800/60', iconEmoji: '🟣' },
+  B09: { code: 'B09', name: 'Water Vapour', spectrum: '945 nm', badgeBgLight: 'bg-sky-50', badgeTextLight: 'text-sky-800', badgeBorderLight: 'border-sky-200', badgeBgDark: 'bg-sky-950/60', badgeTextDark: 'text-sky-300', badgeBorderDark: 'border-sky-800/60', iconEmoji: '☁️' },
+  B11: { code: 'B11', name: 'SWIR 1', spectrum: '1610 nm', badgeBgLight: 'bg-orange-50', badgeTextLight: 'text-orange-800', badgeBorderLight: 'border-orange-200', badgeBgDark: 'bg-orange-950/60', badgeTextDark: 'text-orange-300', badgeBorderDark: 'border-orange-800/60', iconEmoji: '🟠' },
+  B12: { code: 'B12', name: 'SWIR 2', spectrum: '2190 nm', badgeBgLight: 'bg-stone-100', badgeTextLight: 'text-stone-800', badgeBorderLight: 'border-stone-300', badgeBgDark: 'bg-stone-900', badgeTextDark: 'text-stone-300', badgeBorderDark: 'border-stone-700', iconEmoji: '🟤' },
+  UNKNOWN: { code: 'UNKNOWN', name: 'Unknown Band', spectrum: 'N/A', badgeBgLight: 'bg-slate-100', badgeTextLight: 'text-slate-700', badgeBorderLight: 'border-slate-300', badgeBgDark: 'bg-slate-800/80', badgeTextDark: 'text-slate-300', badgeBorderDark: 'border-slate-700', iconEmoji: '⚪' },
+};
+
+function detectBandCode(filename: string, serverBand?: string): string {
+  if (serverBand && serverBand !== 'UNKNOWN' && SENTINEL2_BANDS[serverBand]) {
+    return serverBand;
+  }
+
+  const upper = filename.toUpperCase();
+
+  const patterns: [RegExp, string][] = [
+    [/[\._\-]B8A[\._\-]/i, 'B8A'],
+    [/[\._\-]B0?1[\._\-]/i, 'B01'],
+    [/[\._\-]B0?2[\._\-]/i, 'B02'],
+    [/[\._\-]B0?3[\._\-]/i, 'B03'],
+    [/[\._\-]B0?4[\._\-]/i, 'B04'],
+    [/[\._\-]B0?5[\._\-]/i, 'B05'],
+    [/[\._\-]B0?6[\._\-]/i, 'B06'],
+    [/[\._\-]B0?7[\._\-]/i, 'B07'],
+    [/[\._\-]B0?8[\._\-]/i, 'B08'],
+    [/[\._\-]B0?9[\._\-]/i, 'B09'],
+    [/[\._\-]B11[\._\-]/i, 'B11'],
+    [/[\._\-]B12[\._\-]/i, 'B12'],
+    [/B8A(?=\.\w+$)/i, 'B8A'],
+    [/B0?1(?=\.\w+$)/i, 'B01'],
+    [/B0?2(?=\.\w+$)/i, 'B02'],
+    [/B0?3(?=\.\w+$)/i, 'B03'],
+    [/B0?4(?=\.\w+$)/i, 'B04'],
+    [/B0?5(?=\.\w+$)/i, 'B05'],
+    [/B0?6(?=\.\w+$)/i, 'B06'],
+    [/B0?7(?=\.\w+$)/i, 'B07'],
+    [/B0?8(?=\.\w+$)/i, 'B08'],
+    [/B0?9(?=\.\w+$)/i, 'B09'],
+    [/B11(?=\.\w+$)/i, 'B11'],
+    [/B12(?=\.\w+$)/i, 'B12'],
+    [/\bB8A\b/i, 'B8A'],
+    [/\bB01\b/i, 'B01'], [/\bB02\b/i, 'B02'], [/\bB03\b/i, 'B03'], [/\bB04\b/i, 'B04'],
+    [/\bB05\b/i, 'B05'], [/\bB06\b/i, 'B06'], [/\bB07\b/i, 'B07'], [/\bB08\b/i, 'B08'],
+    [/\bB09\b/i, 'B09'], [/\bB11\b/i, 'B11'], [/\bB12\b/i, 'B12'],
+  ];
+
+  for (const [regex, code] of patterns) {
+    if (regex.test(upper)) return code;
+  }
+
+  if (upper.includes('SWIR1') || upper.includes('SWIR-1')) return 'B11';
+  if (upper.includes('SWIR2') || upper.includes('SWIR-2')) return 'B12';
+  if (upper.includes('NIR')) return 'B08';
+  if (upper.includes('REDEDGE') || upper.includes('RED_EDGE')) return 'B05';
+
+  return 'UNKNOWN';
+}
+
 export default function ImageAnalysisPage() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -22,6 +101,9 @@ export default function ImageAnalysisPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
+  const [serverBands, setServerBands] = useState<Record<string, string>>({});
+  const [isInspecting, setIsInspecting] = useState(false);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progressStage, setProgressStage] = useState(0);
   const [progressText, setProgressText] = useState("");
@@ -34,28 +116,10 @@ export default function ImageAnalysisPage() {
   const [aiResult, setAiResult] = useState<any>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const getBandName = (filename: string) => {
-    const upper = filename.toUpperCase();
-    if (upper.includes('B01')) return 'B01 — Coastal Aerosol';
-    if (upper.includes('B02')) return 'B02 — Blue';
-    if (upper.includes('B03')) return 'B03 — Green';
-    if (upper.includes('B04')) return 'B04 — Red';
-    if (upper.includes('B05')) return 'B05 — Red Edge 1';
-    if (upper.includes('B06')) return 'B06 — Red Edge 2';
-    if (upper.includes('B07')) return 'B07 — Red Edge 3';
-    if (upper.includes('B08')) return 'B08 — NIR';
-    if (upper.includes('B8A')) return 'B8A — Narrow NIR';
-    if (upper.includes('B09')) return 'B09 — Water Vapour';
-    if (upper.includes('B11')) return 'B11 — SWIR 1';
-    if (upper.includes('B12')) return 'B12 — SWIR 2';
-    return 'Unknown Band';
-  };
-
   const handleFiles = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files);
     const validTypes = ['image/png', 'image/jpeg', 'image/tiff'];
     
-    // Validate all files
     for (const file of fileArray) {
       if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.tif') && !file.name.toLowerCase().endsWith('.tiff')) {
         setError('Unsupported format. Please upload PNG, JPG, or GeoTIFF.');
@@ -69,7 +133,26 @@ export default function ImageAnalysisPage() {
     setAiResult(null);
     setProgressStage(0);
 
-    // If it's a single RGB image, try to preview it
+    // Call server band inspection asynchronously for GeoTIFF files
+    const tiffFiles = fileArray.filter(f => f.name.toLowerCase().endsWith('.tif') || f.name.toLowerCase().endsWith('.tiff'));
+    if (tiffFiles.length > 0) {
+      setIsInspecting(true);
+      BackendAPI.inspectBands(tiffFiles)
+        .then(res => {
+          if (res && res.status === 'success' && Array.isArray(res.bands)) {
+            const mapped: Record<string, string> = {};
+            res.bands.forEach((b: any) => {
+              if (b.filename && b.detected_band) {
+                mapped[b.filename] = b.detected_band;
+              }
+            });
+            setServerBands(prev => ({ ...prev, ...mapped }));
+          }
+        })
+        .catch(err => console.warn('[Band Inspection] Async error:', err))
+        .finally(() => setIsInspecting(false));
+    }
+
     if (fileArray.length === 1 && fileArray[0].type.startsWith('image/') && !fileArray[0].name.toLowerCase().endsWith('.tif') && !fileArray[0].name.toLowerCase().endsWith('.tiff')) {
       const reader = new FileReader();
       reader.onload = (e) => setPreviewUrl(e.target?.result as string);
@@ -202,6 +285,18 @@ export default function ImageAnalysisPage() {
     }
   };
 
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to results container once analysis is completed
+  useEffect(() => {
+    if (result) {
+      const timer = setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [result]);
+
   const removeFile = (index: number) => {
     setSelectedFiles(prev => {
       const updated = prev.filter((_, i) => i !== index);
@@ -214,6 +309,92 @@ export default function ImageAnalysisPage() {
       }
       return updated;
     });
+  };
+
+  const getBandAnalysisSummary = () => {
+    if (selectedFiles.length === 0) return null;
+
+    const detectedMap = selectedFiles.map(f => {
+      const code = detectBandCode(f.name, serverBands[f.name]);
+      return { file: f, band: SENTINEL2_BANDS[code] || SENTINEL2_BANDS.UNKNOWN };
+    });
+
+    const detectedCodes = detectedMap.map(d => d.band.code).filter(c => c !== 'UNKNOWN');
+
+    // Find duplicates
+    const codeCounts: Record<string, number> = {};
+    detectedCodes.forEach(c => { codeCounts[c] = (codeCounts[c] || 0) + 1; });
+    const duplicateCodes = Object.keys(codeCounts).filter(c => codeCounts[c] > 1);
+
+    const hasB02 = detectedCodes.includes('B02');
+    const hasB03 = detectedCodes.includes('B03');
+    const hasB04 = detectedCodes.includes('B04');
+    const hasB08 = detectedCodes.includes('B08') || detectedCodes.includes('B8A');
+    const hasB11 = detectedCodes.includes('B11');
+    const hasB12 = detectedCodes.includes('B12');
+
+    if (duplicateCodes.length > 0) {
+      const dupNames = duplicateCodes.map(c => `${SENTINEL2_BANDS[c].iconEmoji} ${c} (${SENTINEL2_BANDS[c].name})`).join(', ');
+      return {
+        type: 'warning',
+        bgLight: 'bg-amber-50/90 border-amber-200 text-amber-900',
+        bgDark: 'bg-amber-950/40 border-amber-800/60 text-amber-200',
+        icon: '⚠️',
+        title: `Duplicate band detected`,
+        details: `Multiple uploaded files are mapped to ${dupNames}. Please review selected files before starting analysis.`
+      };
+    }
+
+    if (selectedFiles.length > 1 && !hasB08) {
+      return {
+        type: 'warning',
+        bgLight: 'bg-amber-50/90 border-amber-200 text-amber-900',
+        bgDark: 'bg-amber-950/40 border-amber-800/60 text-amber-200',
+        icon: '⚠️',
+        title: `Missing NIR (B08) band`,
+        details: `Bands detected: ${detectedCodes.join(', ') || 'None'}. Without NIR (B08), key vegetation indices like NDVI and EVI will not be computed.`
+      };
+    }
+
+    if (hasB02 && hasB03 && hasB04 && hasB08) {
+      const capabilities = ['NDVI', 'NDWI', 'EVI', 'True-Color RGB'];
+      if (hasB11 || hasB12) capabilities.push('NDBI (Built-up)');
+      return {
+        type: 'success',
+        bgLight: 'bg-emerald-50/90 border-emerald-200 text-emerald-900',
+        bgDark: 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200',
+        icon: '✅',
+        title: `Bands detected: ${detectedCodes.join(', ')}`,
+        details: `Ready for ${capabilities.join(', ')} quantitative analysis.`
+      };
+    }
+
+    if (detectedCodes.length > 0) {
+      const readyCaps: string[] = [];
+      if (hasB04 && hasB08) readyCaps.push('NDVI');
+      if (hasB03 && hasB08) readyCaps.push('NDWI');
+      if (hasB02 && hasB03 && hasB04) readyCaps.push('True-Color RGB');
+
+      return {
+        type: 'info',
+        bgLight: 'bg-blue-50/90 border-blue-200 text-blue-900',
+        bgDark: 'bg-blue-950/40 border-blue-800/60 text-blue-200',
+        icon: 'ℹ️',
+        title: `Bands detected: ${detectedCodes.join(', ')}`,
+        details: readyCaps.length > 0
+          ? `Sufficient for ${readyCaps.join(' & ')} calculations.`
+          : `Band files registered. Upload B02, B03, B04, and B08 for full spectral analysis.`
+      };
+    }
+
+    return {
+      type: 'info',
+      bgLight: 'bg-[#FAFAF7] border-[#E5E7DE] text-[#2D3B27]',
+      bgDark: 'bg-[#131B2E] border-[#1E293B] text-[#F1F5F9]',
+      icon: '📷',
+      title: `Single RGB / Image file loaded`,
+      details: `Ready for visual feature classification & land cover prediction.`
+    };
   };
 
   return (
@@ -298,53 +479,82 @@ export default function ImageAnalysisPage() {
                   + Add More Files
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {selectedFiles.map((f, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-center justify-between gap-2.5 text-xs font-medium p-3 rounded-xl border shadow-2xs transition-colors ${
-                      isLight
-                        ? 'bg-white border-[#E5E7DE]'
-                        : 'bg-[#0F172A] border-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <CheckCircle className={`h-4 w-4 flex-shrink-0 ${
-                        isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'
-                      }`} />
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <span className={`truncate font-semibold text-xs ${
-                          isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'
-                        }`} title={f.name}>
-                          {f.name}
-                          {(f.name.toLowerCase().endsWith('.tif') || f.name.toLowerCase().endsWith('.tiff')) && getBandName(f.name) !== 'Unknown Band'
-                            ? ` (${getBandName(f.name)})`
-                            : ''}
-                        </span>
-                        <span className={`text-[11px] font-medium mt-0.5 ${
-                          isLight ? 'text-[#6B7568]' : 'text-slate-400'
-                        }`}>
-                          {(f.size / (1024 * 1024)).toFixed(2)} MB · {f.name.split('.').pop()?.toUpperCase() || 'FILE'}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(i)}
-                      className={`p-1 rounded-md transition-colors cursor-pointer flex-shrink-0 text-base font-bold leading-none ${
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {selectedFiles.map((f, i) => {
+                  const bandCode = detectBandCode(f.name, serverBands[f.name]);
+                  const bandInfo = SENTINEL2_BANDS[bandCode] || SENTINEL2_BANDS.UNKNOWN;
+
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-start justify-between gap-2.5 text-xs font-medium p-3 rounded-xl border shadow-2xs transition-colors ${
                         isLight
-                          ? 'text-slate-400 hover:text-red-600 hover:bg-red-50'
-                          : 'text-slate-400 hover:text-red-400 hover:bg-red-950/40'
+                          ? 'bg-white border-[#E5E7DE]'
+                          : 'bg-[#0F172A] border-[#1E293B]'
                       }`}
-                      title="Remove file"
                     >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <CheckCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
+                          isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'
+                        }`} />
+                        <div className="flex flex-col min-w-0 flex-1 space-y-1">
+                          <span className={`truncate font-semibold text-xs ${
+                            isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'
+                          }`} title={f.name}>
+                            {f.name}
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[11px] font-medium ${
+                              isLight ? 'text-[#6B7568]' : 'text-slate-400'
+                            }`}>
+                              {(f.size / (1024 * 1024)).toFixed(2)} MB · {f.name.split('.').pop()?.toUpperCase() || 'FILE'}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border shadow-2xs ${
+                              isLight
+                                ? `${bandInfo.badgeBgLight} ${bandInfo.badgeTextLight} ${bandInfo.badgeBorderLight}`
+                                : `${bandInfo.badgeBgDark} ${bandInfo.badgeTextDark} ${bandInfo.badgeBorderDark}`
+                            }`}>
+                              <span>{bandInfo.iconEmoji}</span>
+                              <span>{bandInfo.code !== 'UNKNOWN' ? `${bandInfo.code} (${bandInfo.name})` : 'Unknown Band'}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className={`p-1 rounded-md transition-colors cursor-pointer flex-shrink-0 text-base font-bold leading-none ${
+                          isLight
+                            ? 'text-slate-400 hover:text-red-600 hover:bg-red-50'
+                            : 'text-slate-400 hover:text-red-400 hover:bg-red-950/40'
+                        }`}
+                        title="Remove file"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
+
+          {/* BAND ANALYSIS SUMMARY BANNER ABOVE ANALYZE BUTTON */}
+          {(() => {
+            const summary = getBandAnalysisSummary();
+            if (!summary) return null;
+            return (
+              <div className={`p-4 rounded-xl border flex items-start gap-3 transition-colors shadow-2xs ${
+                isLight ? summary.bgLight : summary.bgDark
+              }`}>
+                <span className="text-lg leading-none flex-shrink-0 mt-0.5">{summary.icon}</span>
+                <div className="space-y-0.5 text-xs min-w-0 flex-1">
+                  <h5 className="font-extrabold text-sm">{summary.title}</h5>
+                  <p className="leading-relaxed opacity-95">{summary.details}</p>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex gap-3">
             <Button
@@ -394,7 +604,7 @@ export default function ImageAnalysisPage() {
           )}
 
           {result && (
-            <div className="space-y-6">
+            <div ref={resultsRef} className="space-y-6">
               <div className="flex flex-col gap-4">
                 <div className="p-4 bg-white border border-[#e2e8f0] rounded-lg">
                   <h3 className="font-bold text-[#0f172a] text-lg mb-4">IMAGE ANALYSIS RESULT</h3>

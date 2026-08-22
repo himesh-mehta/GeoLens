@@ -386,6 +386,30 @@ def analyze_image():
         return jsonify({"success": False, "error": f"Unable to analyze uploaded image: {str(e)}"}), 500
 
 
+@app.route("/api/inspect-bands", methods=["POST"])
+def inspect_bands():
+    """Inspects uploaded GeoTIFF files for embedded metadata and returns band identifications."""
+    try:
+        uploaded_files = request.files.getlist("files") or request.files.getlist("file")
+        if not uploaded_files:
+            return jsonify({"status": "error", "message": "No files provided"}), 400
+            
+        results = []
+        for f in uploaded_files:
+            filename = f.filename
+            file_bytes = f.read()
+            detected_band, metadata = vision_ext.inspect_single_geotiff(filename, file_bytes)
+            results.append({
+                "filename": filename,
+                "detected_band": detected_band,
+                "metadata": metadata
+            })
+            
+        return jsonify({"status": "success", "bands": results})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
     point_id = data.get("point_id")
 
     if point_id is not None:

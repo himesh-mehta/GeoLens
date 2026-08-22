@@ -141,6 +141,22 @@ export const BackendAPI = {
     }
   },
 
+  inspectBands: async (files: File[]) => {
+    try {
+      const formData = new FormData();
+      files.forEach(file => formData.append('files', file));
+      const res = await fetch(`${API_BASE}/api/inspect-bands`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (err) {
+      console.warn('[API Client] Band inspection failed:', err);
+      return null;
+    }
+  },
+
   submitFeedback: (pointId: number, verdict: string, notes?: string) =>
     fetchFromBackend('/api/feedback', {
       method: 'POST',

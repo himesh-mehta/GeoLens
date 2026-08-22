@@ -118,12 +118,24 @@ function ComparePageContent() {
   const [searchResults, setSearchResults] = useState<{lat: string, lon: string, display_name: string}[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  const resultsRef = useRef<HTMLDivElement>(null);
+
   // Auto-enable & trigger comparison when both periods are loaded
   useEffect(() => {
     if (p1Data && p2Data) {
       setShowCompare(true);
     }
   }, [p1Data, p2Data]);
+
+  // Auto-scroll to Comparison Results once generated
+  useEffect(() => {
+    if (showCompare && p1Data && p2Data) {
+      const timer = setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [showCompare, p1Data, p2Data]);
 
   const fetchPeriodData = async (num: 1 | 2) => {
     const isP1 = num === 1;
@@ -500,7 +512,8 @@ function ComparePageContent() {
 
       {/* COMPARISON RESULTS */}
       {showCompare && p1Data && p2Data && (
-        <Card className="border-emerald-200 shadow-md">
+        <div ref={resultsRef}>
+          <Card className="border-emerald-200 shadow-md">
           <CardContent className="p-0">
             <div className="bg-slate-50 p-6 border-b">
                 <h3 className="text-xl font-bold text-slate-800 mb-2">GEE Verified Change Analysis</h3>
@@ -569,6 +582,7 @@ function ComparePageContent() {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
     </div>
   );

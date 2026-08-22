@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
@@ -187,6 +187,18 @@ export default function ExplorerPage() {
       else setGeeStatus('unavailable');
     }).catch(() => setGeeStatus('unavailable'));
   }, []);
+
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to Full Analysis Report section on new analysis results
+  useEffect(() => {
+    if (pointResult || polygonResult) {
+      const timer = setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [pointResult, polygonResult]);
 
   // ── Save area ─────────────────────────────────────────────────────────────
   const handleSaveArea = () => {
@@ -888,7 +900,7 @@ export default function ExplorerPage() {
 
       {/* ── BOTTOM FULL-WIDTH SECTION: Detailed Full Analysis Report Panel ── */}
       {(isAnalyzing || pointResult || polygonResult || errorMessage) && (
-        <div className={`w-full flex-shrink-0 border-t transition-all duration-300 ${
+        <div ref={resultsRef} className={`w-full flex-shrink-0 border-t transition-all duration-300 ${
           isLight ? 'bg-[#FFFFFF] border-[#E5E7DE] text-[#2D3B27]' : 'bg-[#131B2E] border-[#1E293B] text-[#F1F5F9]'
         }`}>
           {/* 1. Header Bar with Coordinates & Validated Badge */}
