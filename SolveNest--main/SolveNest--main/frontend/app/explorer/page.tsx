@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, Suspense, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, MapPin, Pentagon, Crosshair,
   Trash2, BarChart2, AlertTriangle, Satellite, GitCompare,
@@ -17,6 +17,16 @@ import { useTheme } from '@/lib/theme/theme-context';
 import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts';
 import { KeyboardShortcutsModal } from '@/components/ui/keyboard-shortcuts-modal';
 import { Keyboard } from 'lucide-react';
+
+function SearchParamsHandler({ onParams }: { onParams: (lat: string|null, lon: string|null, name: string|null, auto: string|null) => void }) {
+  const searchParams = useSearchParams();
+  React.useEffect(() => {
+    if (searchParams) {
+      onParams(searchParams.get('lat'), searchParams.get('lon'), searchParams.get('name'), searchParams.get('auto_analyze'));
+    }
+  }, [searchParams, onParams]);
+  return null;
+}
 
 // Dynamic import to avoid SSR issues with Leaflet
 const MapComponent = dynamic(
@@ -435,7 +445,28 @@ export default function ExplorerPage() {
       : null,
   };
 
+  const handleParams = useCallback((lat: string | null, lon: string | null, name: string | null, auto: string | null) => {
+    if (lat && lon) {
+      const latF = parseFloat(lat);
+      const lonF = parseFloat(lon);
+      if (!isNaN(latF) && !isNaN(lonF)) {
+        setSelectedPoint((prev) => {
+          if (prev && prev[0] === latF && prev[1] === lonF) return prev;
+          return [latF, lonF];
+        });
+        setLatInput((prev) => prev !== lat ? lat : prev);
+        setLonInput((prev) => prev !== lon ? lon : prev);
+        if (name) setLocationName(name);
+        if (auto === 'true') {
+          setTimeout(() => { document.getElementById('analyze-btn')?.click(); }, 1000);
+        }
+      }
+    }
+  }, []);
+
   return (
+    <Suspense fallback={<div className="p-4">Loading Explorer...</div>}>
+      <SearchParamsHandler onParams={handleParams} />
     <div className={`w-full h-full flex flex-col overflow-y-auto min-h-0 transition-colors duration-200 ${
       isLight ? 'bg-[#FAFAF7]' : 'bg-[#0F172A]'
     }`}>
@@ -1031,15 +1062,15 @@ export default function ExplorerPage() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                   {[
-                    { name: 'Agriculture', color: '#eab308', defaultVal: 88.5 },
-                    { name: 'Vegetation', color: '#8FBC5A', defaultVal: 5.2 },
-                    { name: 'Water Bodies', color: '#5B9BD5', defaultVal: 1.1 },
-                    { name: 'Built-up / Urban', color: '#C4823A', defaultVal: 3.8 },
-                    { name: 'Barren Soil', color: '#A9825A', defaultVal: 1.4 },
+                    { name: 'Agriculture', color: '#eab308' },
+                    { name: 'Vegetation', color: '#8FBC5A' },
+                    { name: 'Water Bodies', color: '#5B9BD5' },
+                    { name: 'Built-up / Urban', color: '#C4823A' },
+                    { name: 'Barren Soil', color: '#A9825A' },
                   ].map((item) => {
                     const probVal = pointResult?.probabilities?.[item.name] !== undefined
                       ? (pointResult.probabilities[item.name] as number) * 100
-                      : item.defaultVal;
+                      : (pointResult?.probabilities ? 0 : 0); // If probabilities exist but class doesn't, it's 0. If no probabilities, also 0 or we could show Unavailable. We'll show 0.
                     return (
                       <div key={item.name} className={`p-3 rounded-xl border space-y-2 ${
                         isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
@@ -1049,7 +1080,7 @@ export default function ExplorerPage() {
                             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
                             <span className="truncate font-semibold text-[11px]">{item.name}</span>
                           </div>
-                          <span className="font-mono font-bold text-[11px] ml-1">{probVal.toFixed(1)}%</span>
+                          <span className="font-mono font-bold text-[11px] ml-1">{pointResult?.probabilities ? `${probVal.toFixed(1)}%` : 'Unavailable'}</span>
                         </div>
                         <div className={`w-full h-1.5 rounded-full border overflow-hidden ${isLight ? 'bg-[#F5F5F0] border-[#D8DCCF]' : 'bg-[#0F172A] border-[#334155]'}`}>
                           <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(4, probVal)}%`, backgroundColor: item.color }} />
@@ -1067,12 +1098,12 @@ export default function ExplorerPage() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {[
-                    { label: 'NDVI (VEGETATION INDEX)', val: pointResult?.features?.NDVI ?? 0.642 },
-                    { label: 'MNDWI (WATER INDEX)', val: pointResult?.features?.MNDWI ?? -0.214 },
-                    { label: 'NDBI (BUILT-UP INDEX)', val: pointResult?.features?.NDBI ?? -0.185 },
-                    { label: 'BSI (BARE SOIL INDEX)', val: pointResult?.features?.BSI ?? -0.092 },
-                    { label: 'SAVI (SOIL-ADJUSTED VEG)', val: pointResult?.features?.SAVI ?? 0.518 },
-                    { label: 'EVI (ENHANCED VEG INDEX)', val: pointResult?.features?.EVI ?? 0.485 },
+                    { label: 'NDVI (VEGETATION INDEX)', val: pointResult?.features?.NDVI ?? 'Unavailable' },
+                    { label: 'MNDWI (WATER INDEX)', val: pointResult?.features?.MNDWI ?? 'Unavailable' },
+                    { label: 'NDBI (BUILT-UP INDEX)', val: pointResult?.features?.NDBI ?? 'Unavailable' },
+                    { label: 'BSI (BARE SOIL INDEX)', val: pointResult?.features?.BSI ?? 'Unavailable' },
+                    { label: 'SAVI (SOIL-ADJUSTED VEG)', val: pointResult?.features?.SAVI ?? 'Unavailable' },
+                    { label: 'EVI (ENHANCED VEG INDEX)', val: pointResult?.features?.EVI ?? 'Unavailable' },
                   ].map((idxItem) => (
                     <div key={idxItem.label} className={`p-3 rounded-xl border ${
                       isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
@@ -1109,38 +1140,38 @@ export default function ExplorerPage() {
                   }`}>
                     <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                       {[
-                        { k: 'B4 (Red)', v: '0.0842' },
-                        { k: 'B8 (NIR)', v: '0.3412' },
-                        { k: 'Greenness', v: '0.4128' },
-                        { k: 'MNDWI', v: '-0.2140' },
-                        { k: 'NBR', v: '0.5124' },
-                        { k: 'NDBI', v: '-0.1850' },
-                        { k: 'NDBI_NDVI_diff', v: '-0.8270' },
-                        { k: 'NDMI', v: '0.2840' },
-                        { k: 'NDVI', v: '0.6420' },
-                        { k: 'NDWI', v: '-0.1980' },
-                        { k: 'NIR_Green_Ratio', v: '2.8410' },
-                        { k: 'NIR_Red_Ratio', v: '4.0520' },
-                        { k: 'SAVI', v: '0.5180' },
-                        { k: 'SWIR_Ratio', v: '1.1420' },
-                        { k: 'UI', v: '-0.3120' },
-                        { k: 'VH', v: '-14.82 dB' },
-                        { k: 'VV', v: '-8.41 dB' },
-                        { k: 'B2 (Blue)', v: '0.0412' },
-                        { k: 'B3 (Green)', v: '0.0615' },
-                        { k: 'B11 (SWIR1)', v: '0.1840' },
-                        { k: 'B12 (SWIR2)', v: '0.1120' },
-                        { k: 'Cloud Cover %', v: `${cloudThreshold}%` },
-                        { k: 'EVI', v: '0.4850' },
-                        { k: 'BSI', v: '-0.0920' },
-                        { k: 'GNDVI', v: '0.5840' },
-                        { k: 'NDRE', v: '0.4120' },
+                        { k: 'B4 (Red)', v: 'Unavailable', key: 'B4' },
+                        { k: 'B8 (NIR)', v: 'Unavailable', key: 'B8' },
+                        { k: 'Greenness', v: 'Unavailable', key: 'Greenness' },
+                        { k: 'MNDWI', v: 'Unavailable', key: 'MNDWI' },
+                        { k: 'NBR', v: 'Unavailable', key: 'NBR' },
+                        { k: 'NDBI', v: 'Unavailable', key: 'NDBI' },
+                        { k: 'NDBI_NDVI_diff', v: 'Unavailable', key: 'NDBI_NDVI_diff' },
+                        { k: 'NDMI', v: 'Unavailable', key: 'NDMI' },
+                        { k: 'NDVI', v: 'Unavailable', key: 'NDVI' },
+                        { k: 'NDWI', v: 'Unavailable', key: 'NDWI' },
+                        { k: 'NIR_Green_Ratio', v: 'Unavailable', key: 'NIR_Green_Ratio' },
+                        { k: 'NIR_Red_Ratio', v: 'Unavailable', key: 'NIR_Red_Ratio' },
+                        { k: 'SAVI', v: 'Unavailable', key: 'SAVI' },
+                        { k: 'SWIR_Ratio', v: 'Unavailable', key: 'SWIR_Ratio' },
+                        { k: 'UI', v: 'Unavailable', key: 'UI' },
+                        { k: 'VH', v: 'Unavailable', key: 'VH' },
+                        { k: 'VV', v: 'Unavailable', key: 'VV' },
+                        { k: 'B2 (Blue)', v: 'Unavailable', key: 'B2' },
+                        { k: 'B3 (Green)', v: 'Unavailable', key: 'B3' },
+                        { k: 'B11 (SWIR1)', v: 'Unavailable', key: 'B11' },
+                        { k: 'B12 (SWIR2)', v: 'Unavailable', key: 'B12' },
+                        { k: 'Cloud Cover %', v: `${cloudThreshold}%`, key: 'none' },
+                        { k: 'EVI', v: 'Unavailable', key: 'EVI' },
+                        { k: 'BSI', v: 'Unavailable', key: 'BSI' },
+                        { k: 'GNDVI', v: 'Unavailable', key: 'GNDVI' },
+                        { k: 'NDRE', v: 'Unavailable', key: 'NDRE' },
                       ].map((item) => (
                         <div key={item.k} className={`p-2 rounded-lg border flex items-center justify-between ${
                           isLight ? 'bg-[#FAFAF7] border-[#E5E7DE]' : 'bg-[#0F172A] border-[#334155]'
                         }`}>
                           <span className="text-[11px] font-semibold text-slate-500">{item.k}</span>
-                          <span className="font-bold text-[11px]">{pointResult?.features?.[item.k] !== undefined ? pointResult.features[item.k].toFixed(4) : item.v}</span>
+                          <span className="font-bold text-[11px]">{item.key !== 'none' && pointResult?.features?.[item.key] !== undefined ? pointResult.features[item.key].toFixed(4) : item.v}</span>
                         </div>
                       ))}
                     </div>
@@ -1180,14 +1211,14 @@ export default function ExplorerPage() {
 
                   <button
                     type="button"
-                    onClick={() => router.push(`/viewer?lat=${pointResult?.latitude || 20.5937}&lon=${pointResult?.longitude || 78.9629}`)}
+                    onClick={() => setLayerMode(layerMode === 'satellite' ? 'map' : 'satellite')}
                     className={`py-2.5 px-3 border rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                       isLight
                         ? 'bg-white border-[#E5E7DE] text-[#2D3B27] hover:bg-[#F0F2EB]'
                         : 'bg-[#0F172A] border-[#334155] text-[#F1F5F9] hover:bg-[#1E293B]'
                     }`}
                   >
-                    <span>🛰️ View Satellite Imagery</span>
+                    <span>🛰️ {layerMode === 'satellite' ? 'View Map' : 'View Satellite Imagery'}</span>
                   </button>
                 </div>
               </div>
@@ -1239,12 +1270,12 @@ export default function ExplorerPage() {
         />
       </div>
 
-      {/* ── KEYBOARD SHORTCUTS HELP MODAL ── */}
+      {/* ── SHORTCUTS MODAL ── */}
       <KeyboardShortcutsModal
         isOpen={showShortcutsModal}
         onClose={() => setShowShortcutsModal(false)}
       />
-
     </div>
+    </Suspense>
   );
 }

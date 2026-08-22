@@ -1,0 +1,4 @@
+{
+  "analysis": "The indices point to a **built‑up area** with a mix of vegetation and dry soil.  \n- **NDVI ≈ 0.41** shows moderate greenness, typical of parks or sparse vegetation in urban settings.  \n- **NDWI ≈ –0.52** indicates little to no water presence.  \n- **BSI ≈ 0.11** and **SAVI ≈ 0.25** confirm low soil brightness and moderate vegetation cover.  \n\nThe **38 % class probability** suggests the classification isn’t highly confident—there may be nearby vegetation or mixed land cover that the sensor is uncertain about. In short, the scene is largely urban with some green patches, but the exact land‑cover mix remains somewhat ambiguous.",
+  "status": "success"
+}

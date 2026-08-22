@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-import requests
+from groq import Groq
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +89,6 @@ The user explicitly requested a comprehensive/full analysis. Provide a complete 
         else:
             user_prompt += "Please provide an AI Analysis based on this context following your system instructions."
             
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
         # 4. Build Messages Array with Conversation History Memory
         messages_payload = [{"role": "system", "content": sys_prompt}]
 
@@ -109,19 +104,29 @@ The user explicitly requested a comprehensive/full analysis. Provide a complete 
 
         messages_payload.append({"role": "user", "content": user_prompt})
         
-        payload = {
-            "model": "openai/gpt-oss-120b",
-            "messages": messages_payload,
-            "temperature": 0.2
-        }
+        # Coalesce consecutive messages with the same role (required by Llama 3 API)
+        coalesced_messages = []
+        for msg in messages_payload:
+            if not coalesced_messages:
+                coalesced_messages.append(msg)
+            elif coalesced_messages[-1]["role"] == msg["role"]:
+                coalesced_messages[-1]["content"] += "\n\n" + msg["content"]
+            else:
+                coalesced_messages.append(msg)
+                
+        client = Groq(api_key=api_key)
         
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=coalesced_messages,
+            temperature=0.2
+        )
+        
+        return completion.choices[0].message.content
         
     except Exception as e:
-        logger.warning(f"Groq API unavailable ({str(e)})")
-        return f"Error: Failed to generate AI analysis. {str(e)}"
+        logger.error(f"Groq API Error: {str(e)}")
+        return "AI analysis is temporarily unavailable. Please check the AI service configuration."
 
 def generate_structured_image_analysis(analysis_context: dict) -> dict:
     """Generates a structured AI analysis using Groq JSON mode."""
@@ -148,27 +153,21 @@ IMPORTANT RULES:
         context_str = json.dumps(analysis_context, indent=2)
         user_prompt = "Here is the current SolveNest image analysis context:\n" + context_str + "\n\nProvide the structured JSON response."
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        client = Groq(api_key=api_key)
         
-        payload = {
-            "model": "openai/gpt-oss-120b",
-            "messages": [
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.1
-        }
+            response_format={"type": "json_object"},
+            temperature=0.1
+        )
         
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        
-        content = response.json()["choices"][0]["message"]["content"]
+        content = completion.choices[0].message.content
         return json.loads(content)
         
     except Exception as e:
-        logger.warning(f"Groq structured analysis unavailable ({str(e)})")
-        return {"error": f"Failed to generate structured AI analysis. {str(e)}"}
+        logger.error(f"Groq structured analysis Error: {str(e)}")
+        return {"error": "AI analysis is temporarily unavailable. Please check the AI service configuration."}

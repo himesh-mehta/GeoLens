@@ -276,7 +276,18 @@ export default function HomePage() {
                     <button
                       onClick={() => {
                         if (item.type === 'analysis') {
-                          router.push(`/viewer?area=${item.areaId}`);
+                          if (item.areaId.includes(',')) {
+                            const [latStr, lonStr] = item.areaId.split(',');
+                            const lat = parseFloat(latStr.trim());
+                            const lon = parseFloat(lonStr.trim());
+                            if (!isNaN(lat) && !isNaN(lon)) {
+                              router.push(`/explorer?lat=${lat}&lon=${lon}`);
+                            } else {
+                              router.push(`/explorer`);
+                            }
+                          } else {
+                            router.push(`/explorer`);
+                          }
                         } else {
                           router.push(`/compare?area=${item.areaId}`);
                         }

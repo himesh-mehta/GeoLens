@@ -551,7 +551,8 @@ def ai_analyze():
             
     question = data.get("question", "")
     
-    # Log incoming request parameters for backend debugging
+    import logging
+    logger = logging.getLogger(__name__)
     logger.info(f"AI Analyze query: question='{question}', context_keys={list(analysis_context.keys())}")
     
     try:

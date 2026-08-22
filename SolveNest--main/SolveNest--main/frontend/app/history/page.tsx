@@ -61,7 +61,18 @@ export default function HistoryPage() {
         const year = item.date || '2024';
         router.push(`/compare?area=${item.areaId}&autorun=true&before=${year}&after=${year === '2024' ? '2018' : '2024'}`);
       } else {
-        router.push(`/viewer?area=${item.areaId}`);
+        if (item.areaId.includes(',')) {
+          const [latStr, lonStr] = item.areaId.split(',');
+          const lat = parseFloat(latStr.trim());
+          const lon = parseFloat(lonStr.trim());
+          if (!isNaN(lat) && !isNaN(lon)) {
+            router.push(`/explorer?lat=${lat}&lon=${lon}`);
+          } else {
+            router.push(`/explorer`);
+          }
+        } else {
+          router.push(`/explorer`);
+        }
       }
     }
   };

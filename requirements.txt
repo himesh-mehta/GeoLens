@@ -14,3 +14,4 @@ rasterio
 python-dotenv
 imbalanced-learn
 tqdm
+groq
