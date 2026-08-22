@@ -57,6 +57,7 @@ export default function HomePage() {
   ];
 
   return (
+<<<<<<< Updated upstream
     <div className={`w-full max-w-7xl mx-auto space-y-10 py-6 px-4 md:px-6 transition-colors duration-200 ${
       isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'
     }`}>
@@ -96,6 +97,21 @@ export default function HomePage() {
         </div>
 
         <div className="pt-1">
+=======
+    <div className="max-w-6xl mx-auto space-y-12 py-8 md:py-12">
+      {/* Hero Section */}
+      <section className="text-center space-y-4 pt-4">
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[#0f172a]">
+          Explore your area
+        </h1>
+        <p className="text-lg text-[#334155] max-w-2xl mx-auto leading-relaxed">
+          Understand what is changing around you using satellite imagery.
+        </p>
+        <p className="text-sm text-[#64748b]">
+          No technical knowledge required.
+        </p>
+        <div className="pt-2">
+>>>>>>> Stashed changes
           <Link href="/explorer">
             <Button variant="link" className={`font-bold text-sm ${
               isLight ? 'text-[#4C7A3D] hover:text-[#3D6330]' : 'text-[#14B8A6] hover:text-teal-300'
@@ -153,6 +169,7 @@ export default function HomePage() {
       <section className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
+<<<<<<< Updated upstream
           {/* Card 1: Analyze Location */}
           <Link href="/explorer" className="block group cursor-pointer">
             <Card className={`transition-all duration-300 h-full shadow-2xs overflow-hidden border rounded-2xl ${
@@ -180,6 +197,17 @@ export default function HomePage() {
                 </CardTitle>
                 <CardDescription className={`text-xs leading-relaxed ${isLight ? 'text-[#6B7568]' : 'text-[#94A3B8]'}`}>
                   {t('home.selectAreaDesc') || 'Enter coordinates or click on the interactive map to compute Sentinel-2 predictions.'}
+=======
+          <Link href="/explorer" className="block cursor-pointer">
+            <Card className="hover:shadow-lg transition-shadow border-[#e2e8f0] h-full">
+              <CardHeader className="space-y-2 text-center h-full flex flex-col justify-center items-center py-10">
+                <div className="w-16 h-16 rounded-full bg-[#ecfdf5] flex items-center justify-center mb-2">
+                  <MapPin className="h-8 w-8 text-[#10b981]" />
+                </div>
+                <CardTitle className="text-xl">📍 Choose a location</CardTitle>
+                <CardDescription className="text-base">
+                  Enter coordinates or click the map
+>>>>>>> Stashed changes
                 </CardDescription>
               </CardContent>
             </Card>

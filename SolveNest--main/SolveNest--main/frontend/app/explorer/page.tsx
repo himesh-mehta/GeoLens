@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   Search, MapPin, Pentagon, Crosshair,
   Trash2, BarChart2, AlertTriangle, Satellite, GitCompare,
+<<<<<<< Updated upstream
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown, History, X, Bot, Sparkles,
   Download, ShieldCheck, Info, FileText
 } from 'lucide-react';
@@ -17,6 +18,13 @@ import { useTheme } from '@/lib/theme/theme-context';
 import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts';
 import { KeyboardShortcutsModal } from '@/components/ui/keyboard-shortcuts-modal';
 import { Keyboard } from 'lucide-react';
+=======
+  ChevronLeft, ChevronRight, X
+} from 'lucide-react';
+import { BackendAPI } from '@/lib/api-client';
+import { areasService } from '@/services/areas-service';
+import { AIAssistant } from '@/components/analysis/ai-assistant';
+>>>>>>> Stashed changes
 
 // Dynamic import to avoid SSR issues with Leaflet
 const MapComponent = dynamic(
@@ -51,6 +59,7 @@ interface PolygonResult {
   validated_accuracy_available: boolean;
 }
 
+<<<<<<< Updated upstream
 const CLASS_COLORS_LIGHT: Record<string, string> = {
   'Water': '#5B9BD5',
   'Vegetation': '#8FBC5A',
@@ -62,6 +71,11 @@ const CLASS_COLORS_LIGHT: Record<string, string> = {
 const CLASS_COLORS_DARK: Record<string, string> = {
   'Water': '#38bdf8',
   'Vegetation': '#4ade80',
+=======
+const CLASS_COLORS: Record<string, string> = {
+  'Water': '#3b82f6',
+  'Vegetation': '#22c55e',
+>>>>>>> Stashed changes
   'Agriculture': '#eab308',
   'Built-up': '#f59e0b',
   'Barren': '#b45309',
@@ -72,6 +86,7 @@ export default function ExplorerPage() {
   const { theme } = useTheme();
   const isLight = theme === 'light';
 
+<<<<<<< Updated upstream
   const classColors = isLight ? CLASS_COLORS_LIGHT : CLASS_COLORS_DARK;
 
   // ── In-memory session cache for fast repeated analysis ─────────────────────
@@ -88,6 +103,11 @@ export default function ExplorerPage() {
   const [recentLocations, setRecentLocations] = useState<HistoryItem[]>([]);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+=======
+  // ── Layout state ──────────────────────────────────────────────────────────
+  const [controlsOpen, setControlsOpen] = useState(true);
+  const [showResultCard, setShowResultCard] = useState(true);
+>>>>>>> Stashed changes
 
   // ── Map state ─────────────────────────────────────────────────────────────
   const [drawMode, setDrawMode] = useState<'point' | 'polygon' | 'none'>('point');
@@ -96,8 +116,13 @@ export default function ExplorerPage() {
   const [selectedPolygon, setSelectedPolygon] = useState<[number, number][] | null>(null);
 
   // ── Input state ───────────────────────────────────────────────────────────
+<<<<<<< Updated upstream
   const [latInput, setLatInput] = useState('20.5937');
   const [lonInput, setLonInput] = useState('78.9629');
+=======
+  const [latInput, setLatInput] = useState('');
+  const [lonInput, setLonInput] = useState('');
+>>>>>>> Stashed changes
   const [startDate, setStartDate] = useState('01/01/2024');
   const [endDate, setEndDate] = useState('31/12/2024');
   const [cloudThreshold, setCloudThreshold] = useState(20);
@@ -115,6 +140,7 @@ export default function ExplorerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [geeStatus, setGeeStatus] = useState<'checking' | 'connected' | 'unavailable'>('checking');
 
+<<<<<<< Updated upstream
   // Check valid location status for analyze button
   const hasValidLocation = Boolean(
     (selectedPoint && selectedPoint.length === 2) ||
@@ -142,6 +168,8 @@ export default function ExplorerPage() {
     },
   });
 
+=======
+>>>>>>> Stashed changes
   // ── URL params ────────────────────────────────────────────────────────────
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -166,6 +194,7 @@ export default function ExplorerPage() {
     }
   }, []);
 
+<<<<<<< Updated upstream
   // ── Recent Locations Loader ───────────────────────────────────────────────
   React.useEffect(() => {
     try {
@@ -176,6 +205,8 @@ export default function ExplorerPage() {
     }
   }, [pointResult, polygonResult]);
 
+=======
+>>>>>>> Stashed changes
   // ── GEE health ────────────────────────────────────────────────────────────
   React.useEffect(() => {
     BackendAPI.getHealthGee().then((res: any) => {
@@ -265,7 +296,11 @@ export default function ExplorerPage() {
     return d;
   };
 
+<<<<<<< Updated upstream
   // ── Analyze (With Instant Caching & Skeleton Feedback) ─────────────────────
+=======
+  // ── Analyze ───────────────────────────────────────────────────────────────
+>>>>>>> Stashed changes
   const handleAnalyze = async () => {
     if (isAnalyzing) return; // Prevent duplicate requests
 
@@ -305,11 +340,16 @@ export default function ExplorerPage() {
     setPointResult(null);
     setPolygonResult(null);
     setShowResultCard(true);
+<<<<<<< Updated upstream
     setShowFullAnalysis(true);
 
     const step2Timer = setTimeout(() => setLoadingStep(2), 1200);
     const step3Timer = setTimeout(() => setLoadingStep(3), 2400);
 
+=======
+    const step2Timer = setTimeout(() => setLoadingStep(2), 1500);
+    const step3Timer = setTimeout(() => setLoadingStep(3), 3000);
+>>>>>>> Stashed changes
     try {
       if (activePoint) {
         const res = await BackendAPI.predictLocation(activePoint[0], activePoint[1], undefined as any, parseDate(startDate), parseDate(endDate), cloudThreshold) as any;
@@ -381,6 +421,10 @@ export default function ExplorerPage() {
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  // ── Dominant polygon class ─────────────────────────────────────────────────
+>>>>>>> Stashed changes
   const getDominantClass = () => {
     if (!polygonResult) return null;
     const sorted = Object.entries(polygonResult.distribution).sort(
@@ -389,6 +433,10 @@ export default function ExplorerPage() {
     return sorted[0] || null;
   };
 
+<<<<<<< Updated upstream
+=======
+  // ── AI context ────────────────────────────────────────────────────────────
+>>>>>>> Stashed changes
   const aiContext = {
     locationId: selectedPoint
       ? `${selectedPoint[0].toFixed(4)},${selectedPoint[1].toFixed(4)}`
@@ -419,6 +467,7 @@ export default function ExplorerPage() {
       : null,
   };
 
+<<<<<<< Updated upstream
   return (
     <div className={`w-full h-full flex flex-col overflow-y-auto min-h-0 transition-colors duration-200 ${
       isLight ? 'bg-[#FAFAF7]' : 'bg-[#0F172A]'
@@ -1201,6 +1250,227 @@ export default function ExplorerPage() {
             <AIAvatar size="xl" className="w-full h-full" />
             <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-400 border-2 border-white rounded-full animate-ping" />
             <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-400 border-2 border-white rounded-full shadow-xs" />
+=======
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="w-full h-full flex overflow-hidden bg-[#f8fafc]">
+
+      {/* ── LEFT: Collapsible Controls Panel ── */}
+      <div
+        className="bg-white border-r border-[#e2e8f0] flex flex-col flex-shrink-0 transition-all duration-200 overflow-hidden z-10"
+        style={{ width: controlsOpen ? '288px' : '52px' }}
+      >
+        {/* Toggle button bar */}
+        <div className={`flex items-center border-b border-[#e2e8f0] flex-shrink-0 ${controlsOpen ? 'justify-between px-3 py-2.5 bg-white' : 'justify-center py-2.5 bg-white'}`}>
+          {controlsOpen && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#0f172a] uppercase tracking-wider">Controls</span>
+              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                geeStatus === 'connected' ? 'bg-green-50 text-green-700 border-green-200' :
+                geeStatus === 'unavailable' ? 'bg-red-50 text-red-700 border-red-200' :
+                'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  geeStatus === 'connected' ? 'bg-green-500' :
+                  geeStatus === 'unavailable' ? 'bg-red-500' :
+                  'bg-amber-400 animate-pulse'
+                }`} />
+                {geeStatus === 'connected' ? 'GEE' : 'Offline'}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => setControlsOpen(o => !o)}
+            title={controlsOpen ? 'Hide controls' : 'Show controls'}
+            className="p-1.5 rounded-md hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0f172a] transition-colors cursor-pointer"
+          >
+            {controlsOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+        </div>
+
+        {/* Controls content — only when open */}
+        {controlsOpen && (
+          <div className="flex-1 overflow-y-auto">
+
+            {/* LOCATION section */}
+            <div className="p-3 border-b border-[#e2e8f0] space-y-3">
+              <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Location</p>
+
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#94a3b8]" />
+                <input
+                  type="text"
+                  placeholder="Search location..."
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchQuery) {
+                      setIsSearching(true);
+                      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`)
+                        .then(res => res.json())
+                        .then(data => { if (data?.length > 0) setSearchResults(data.slice(0, 5)); else { setSearchResults([]); alert("Location not found."); } })
+                        .catch(() => { setSearchResults([]); alert("Search failed."); })
+                        .finally(() => setIsSearching(false));
+                    }
+                  }}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981] outline-none"
+                />
+                {isSearching && <div className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 border-2 border-[#10b981] border-t-transparent rounded-full animate-spin" />}
+                {searchResults.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-[#e2e8f0] rounded-md shadow-lg overflow-hidden">
+                    {searchResults.map((res, i) => (
+                      <button key={i} title={res.display_name}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#f8fafc] border-b border-[#e2e8f0] last:border-0 truncate"
+                        onClick={() => {
+                          const lat = parseFloat(res.lat), lon = parseFloat(res.lon);
+                          setSelectedPoint([lat, lon]); setLatInput(lat.toFixed(6)); setLonInput(lon.toFixed(6));
+                          setDrawMode('point'); setSelectedPolygon(null); setSearchResults([]);
+                          setSearchQuery(res.display_name.split(',')[0]);
+                        }}>{res.display_name}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Coordinates */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-[#64748b] mb-0.5 block">Latitude</label>
+                  <input type="number" step="any" placeholder="20.5937" value={latInput}
+                    onChange={e => setLatInput(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#64748b] mb-0.5 block">Longitude</label>
+                  <input type="number" step="any" placeholder="78.9629" value={lonInput}
+                    onChange={e => setLonInput(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] outline-none" />
+                </div>
+              </div>
+              <button onClick={handleManualCoords}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs border border-[#e2e8f0] rounded-md hover:bg-[#f8fafc] transition-colors cursor-pointer">
+                <Crosshair className="h-3 w-3" /> Go to Coordinates
+              </button>
+            </div>
+
+            {/* ANALYSIS PERIOD section */}
+            <div className="p-3 border-b border-[#e2e8f0] space-y-3">
+              <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Analysis Period</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-[#64748b] mb-0.5 block">Start (DD/MM/YYYY)</label>
+                  <input type="text" value={startDate} onChange={e => setStartDate(e.target.value)} placeholder="01/01/2024"
+                    className="w-full px-2 py-1.5 text-xs border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#64748b] mb-0.5 block">End (DD/MM/YYYY)</label>
+                  <input type="text" value={endDate} onChange={e => setEndDate(e.target.value)} placeholder="31/12/2024"
+                    className="w-full px-2 py-1.5 text-xs border border-[#e2e8f0] rounded-md focus:ring-2 focus:ring-[#10b981] outline-none" />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { label: '2024', s: '01/01/2024', e: '31/12/2024' },
+                  { label: '2020', s: '01/01/2020', e: '31/12/2020' },
+                  { label: '2018', s: '01/01/2018', e: '31/12/2018' },
+                ].map(p => (
+                  <button key={p.label} onClick={() => { setStartDate(p.s); setEndDate(p.e); }}
+                    className="px-2 py-1 text-[10px] bg-[#f1f5f9] hover:bg-[#e2e8f0] rounded cursor-pointer transition-colors">{p.label}</button>
+                ))}
+                <button onClick={() => {
+                  const today = new Date(), past = new Date(); past.setDate(today.getDate() - 30);
+                  const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+                  setStartDate(fmt(past)); setEndDate(fmt(today));
+                }} className="px-2 py-1 text-[10px] bg-[#f1f5f9] hover:bg-[#e2e8f0] rounded cursor-pointer transition-colors">Last 30d</button>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#64748b] mb-0.5 flex justify-between">
+                  <span>Cloud Max</span><span className="font-semibold">{cloudThreshold}%</span>
+                </label>
+                <input type="range" min="0" max="100" value={cloudThreshold}
+                  onChange={e => setCloudThreshold(parseInt(e.target.value))} className="w-full accent-[#10b981]" />
+              </div>
+            </div>
+
+            {/* SELECT AREA section */}
+            <div className="p-3 border-b border-[#e2e8f0] space-y-2">
+              <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Select Area</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDrawMode('point')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium border transition-colors cursor-pointer ${
+                    drawMode === 'point' ? 'bg-[#10b981] text-white border-[#10b981]' : 'border-[#e2e8f0] hover:bg-[#f8fafc]'
+                  }`}>
+                  <MapPin className="h-3 w-3" /> Point
+                </button>
+                <button
+                  onClick={() => setDrawMode('polygon')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium border transition-colors cursor-pointer ${
+                    drawMode === 'polygon' ? 'bg-[#10b981] text-white border-[#10b981]' : 'border-[#e2e8f0] hover:bg-[#f8fafc]'
+                  }`}>
+                  <Pentagon className="h-3 w-3" /> Polygon
+                </button>
+              </div>
+              <button onClick={handleClearSelection}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs border border-[#e2e8f0] rounded-md text-[#ef4444] hover:bg-[#fef2f2] transition-colors cursor-pointer">
+                <Trash2 className="h-3 w-3" /> Clear Selection
+              </button>
+            </div>
+
+            {/* ANALYZE BUTTON */}
+            <div className="p-3">
+              <button
+                id="analyze-btn"
+                onClick={handleAnalyze}
+                disabled={isAnalyzing || (!selectedPoint && (!selectedPolygon || selectedPolygon.length < 3))}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-md transition-colors cursor-pointer"
+              >
+                {isAnalyzing
+                  ? <><span className="animate-spin text-base">⟳</span> {getLoadingMessage()}</>
+                  : <><BarChart2 className="h-4 w-4" /> Analyze Area</>
+                }
+              </button>
+            </div>
+
+            {/* DATA SOURCE footer */}
+            <div className="mt-auto p-3 border-t border-[#e2e8f0] bg-[#f8fafc]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Satellite className="h-3 w-3 text-[#94a3b8]" />
+                <span className="text-[10px] text-[#94a3b8]">Google Earth Engine · Sentinel-2</span>
+              </div>
+              <p className="text-[10px] text-[#94a3b8]">Model: ExtraTrees · Training: 2018 + 2024</p>
+            </div>
+          </div>
+        )}
+
+        {/* Icon-only collapsed state */}
+        {!controlsOpen && (
+          <div className="flex flex-col items-center gap-3 py-3">
+            <button title="Search" onClick={() => setControlsOpen(true)}
+              className="p-2 rounded-md hover:bg-[#f1f5f9] text-[#64748b] cursor-pointer transition-colors">
+              <Search className="h-4 w-4" />
+            </button>
+            <button title="Point" onClick={() => { setDrawMode('point'); setControlsOpen(true); }}
+              className={`p-2 rounded-md cursor-pointer transition-colors ${drawMode === 'point' ? 'bg-[#10b981] text-white' : 'hover:bg-[#f1f5f9] text-[#64748b]'}`}>
+              <MapPin className="h-4 w-4" />
+            </button>
+            <button title="Polygon" onClick={() => { setDrawMode('polygon'); setControlsOpen(true); }}
+              className={`p-2 rounded-md cursor-pointer transition-colors ${drawMode === 'polygon' ? 'bg-[#10b981] text-white' : 'hover:bg-[#f1f5f9] text-[#64748b]'}`}>
+              <Pentagon className="h-4 w-4" />
+            </button>
+            <button title="Clear" onClick={handleClearSelection}
+              className="p-2 rounded-md hover:bg-[#fef2f2] text-[#ef4444] cursor-pointer transition-colors">
+              <Trash2 className="h-4 w-4" />
+            </button>
+            <button title="Analyze Area" onClick={handleAnalyze}
+              disabled={isAnalyzing || (!selectedPoint && (!selectedPolygon || selectedPolygon.length < 3))}
+              className="p-2 rounded-md bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 text-white cursor-pointer transition-colors">
+              <BarChart2 className="h-4 w-4" />
+            </button>
+>>>>>>> Stashed changes
           </div>
         )}
       </button>
@@ -1223,11 +1493,190 @@ export default function ExplorerPage() {
         />
       </div>
 
+<<<<<<< Updated upstream
       {/* ── KEYBOARD SHORTCUTS HELP MODAL ── */}
       <KeyboardShortcutsModal
         isOpen={showShortcutsModal}
         onClose={() => setShowShortcutsModal(false)}
       />
+=======
+      {/* ── CENTER: Map (dominant) ── */}
+      <div className="flex-1 relative min-w-0 overflow-hidden h-full">
+        <MapComponent
+          center={[20.5937, 78.9629]}
+          zoom={5}
+          drawMode={drawMode}
+          layerMode={layerMode}
+          selectedPoint={selectedPoint}
+          selectedPolygon={selectedPolygon}
+          onPointSelected={handlePointSelected}
+          onPolygonSelected={handlePolygonSelected}
+        />
+
+        {/* ── Floating Result Card (over map) ── */}
+        {(pointResult || polygonResult || errorMessage) && showResultCard && (
+          <div className="absolute top-16 right-3 z-[500] w-64 max-h-[calc(100%-80px)] overflow-y-auto">
+            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-lg overflow-hidden">
+              {/* Card header */}
+              <div className="flex items-center justify-between px-3 py-2 bg-[#f8fafc] border-b border-[#e2e8f0]">
+                <span className="text-xs font-bold text-[#0f172a]">
+                  {pointResult ? 'Location Result' : polygonResult ? 'Polygon Result' : 'Analysis'}
+                </span>
+                <button onClick={() => setShowResultCard(false)}
+                  className="p-0.5 rounded hover:bg-[#e2e8f0] text-[#94a3b8] hover:text-[#334155] cursor-pointer transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Error */}
+              {errorMessage && (
+                <div className="p-3 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-[#ef4444] flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-[#ef4444]">{errorMessage}</p>
+                </div>
+              )}
+
+              {/* Point result compact */}
+              {pointResult && (
+                <div className="p-3 space-y-2">
+                  <div>
+                    <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider">Location</p>
+                    <p className="text-xs text-[#334155]">{pointResult.latitude.toFixed(4)}° N, {pointResult.longitude.toFixed(4)}° E</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider">Period</p>
+                    <p className="text-xs text-[#334155]">{pointResult.date_range}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: CLASS_COLORS[pointResult.prediction] || '#94a3b8' }} />
+                    <div>
+                      <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider">Land Cover</p>
+                      <p className="text-sm font-bold text-[#0f172a]">{pointResult.prediction}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider">Class Probability</p>
+                    <p className="text-sm font-bold text-[#0f172a]">{(pointResult.confidence * 100).toFixed(1)}%</p>
+                    <div className="w-full bg-[#f1f5f9] rounded-full h-1.5 mt-1">
+                      <div className="h-1.5 rounded-full transition-all"
+                        style={{ width: `${pointResult.confidence * 100}%`, backgroundColor: pointResult.confidence > 0.7 ? '#10b981' : pointResult.confidence > 0.4 ? '#f59e0b' : '#ef4444' }} />
+                    </div>
+                  </div>
+
+                  {/* Collapsible details */}
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-[#3b82f6] hover:text-[#2563eb] text-[10px] font-semibold">Technical details ▾</summary>
+                    <div className="mt-2 space-y-1.5 pt-2 border-t border-[#e2e8f0]">
+                      {/* Probabilities */}
+                      {pointResult.probabilities && Object.entries(pointResult.probabilities).map(([cls, prob]) => (
+                        <div key={cls} className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CLASS_COLORS[cls] || '#94a3b8' }} />
+                          <span className="text-[10px] text-[#64748b] flex-1">{cls}</span>
+                          <span className="text-[10px] font-mono text-[#0f172a]">{((prob as number) * 100).toFixed(1)}%</span>
+                        </div>
+                      ))}
+                      {/* Key spectral indices */}
+                      {pointResult.features && (
+                        <div className="mt-1 grid grid-cols-2 gap-1">
+                          {['NDVI', 'MNDWI', 'NDBI', 'SAVI'].map(feat =>
+                            pointResult.features![feat] !== undefined ? (
+                              <div key={feat} className="flex justify-between bg-[#f8fafc] px-1.5 py-0.5 rounded border border-[#e2e8f0]">
+                                <span className="text-[9px] font-semibold text-[#64748b]">{feat}</span>
+                                <span className="text-[9px] font-mono">{pointResult.features![feat].toFixed(3)}</span>
+                              </div>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+
+                  {/* Actions */}
+                  <div className="flex gap-1.5 pt-1">
+                    <button onClick={handleSaveArea} disabled={saveSuccess}
+                      className="flex-1 px-2 py-1 text-[10px] font-semibold border border-[#e2e8f0] rounded hover:bg-[#f8fafc] disabled:opacity-50 cursor-pointer transition-colors">
+                      {saveSuccess ? '✓ Saved' : 'Save'}
+                    </button>
+                    <button onClick={() => router.push(`/compare?lat=${pointResult.latitude}&lon=${pointResult.longitude}`)}
+                      className="flex-1 px-2 py-1 text-[10px] font-semibold border border-[#e2e8f0] rounded hover:bg-[#f8fafc] cursor-pointer transition-colors flex items-center justify-center gap-1">
+                      <GitCompare className="h-3 w-3" /> Compare
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Polygon result compact */}
+              {polygonResult && (() => {
+                const top = getDominantClass();
+                return (
+                  <div className="p-3 space-y-2">
+                    {polygonResult.year_status === 'inference_only' && (
+                      <div className="flex items-center gap-1.5 text-[10px] bg-[#fffbeb] border border-[#fde68a] rounded px-2 py-1 text-[#92400e]">
+                        <AlertTriangle className="h-3 w-3" /> Inference-only period
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider">Period · Samples</p>
+                      <p className="text-xs text-[#334155]">{polygonResult.date_range} · {polygonResult.samples_analyzed}</p>
+                    </div>
+                    {top && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: CLASS_COLORS[top[0]] || '#94a3b8' }} />
+                        <div>
+                          <p className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wider">Dominant</p>
+                          <p className="text-sm font-bold text-[#0f172a]">{top[0]} <span className="text-xs text-[#64748b] font-normal">({top[1].regional_landcover_percentage}%)</span></p>
+                        </div>
+                      </div>
+                    )}
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-[#3b82f6] hover:text-[#2563eb] text-[10px] font-semibold">All classes ▾</summary>
+                      <div className="mt-2 space-y-1 pt-2 border-t border-[#e2e8f0]">
+                        {Object.entries(polygonResult.distribution).map(([cls, data]) => (
+                          <div key={cls} className="space-y-0.5">
+                            <div className="flex justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CLASS_COLORS[cls] || '#94a3b8' }} />
+                                <span className="text-[10px] text-[#334155]">{cls}</span>
+                              </div>
+                              <span className="text-[10px] font-semibold">{data.regional_landcover_percentage}%</span>
+                            </div>
+                            <div className="w-full bg-[#f1f5f9] rounded-full h-1">
+                              <div className="h-1 rounded-full" style={{ width: `${data.regional_landcover_percentage}%`, backgroundColor: CLASS_COLORS[cls] || '#94a3b8' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                    <button onClick={() => router.push(`/compare?polygon=${encodeURIComponent(JSON.stringify(selectedPolygon))}`)}
+                      className="w-full px-2 py-1 text-[10px] font-semibold border border-[#e2e8f0] rounded hover:bg-[#f8fafc] cursor-pointer transition-colors flex items-center justify-center gap-1">
+                      <GitCompare className="h-3 w-3" /> Compare Years
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Re-show result card button */}
+        {(pointResult || polygonResult) && !showResultCard && (
+          <button
+            onClick={() => setShowResultCard(true)}
+            className="absolute top-16 right-3 z-[500] bg-white border border-[#e2e8f0] shadow-md rounded-lg px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-[#f8fafc] cursor-pointer transition-colors"
+          >
+            Show Result
+          </button>
+        )}
+      </div>
+
+      {/* ── RIGHT: GPT-OSS Assistant Panel ── */}
+      <div className="w-80 flex-shrink-0 border-l border-[#e2e8f0] bg-white flex flex-col overflow-hidden h-full">
+        <AIAssistant
+          context={aiContext}
+          onSelectFindingById={() => {}}
+        />
+      </div>
+>>>>>>> Stashed changes
 
     </div>
   );
