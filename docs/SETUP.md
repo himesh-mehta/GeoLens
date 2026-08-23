@@ -46,11 +46,11 @@ You must obtain these two files from your team lead or shared secure storage:
 1. `SIH_LandCover_ExtraTrees_Improved.pkl`
 2. `SIH_LandCover_RandomForest.pkl`
 
-Once downloaded, place both `.pkl` files in the following directory:
+Once trained or downloaded, place the `.pkl` model file in the following directory:
 ```
-SIH_OUTPUT/
+data/results/
 ```
-*(If the directory does not exist, create it).*
+*(You can also auto-generate the model file by running `python scripts/train_final_model.py`).*
 
 ## 5. Starting the Application
 
@@ -66,16 +66,16 @@ Open a terminal in the root directory of the project:
    ```
 2. Run the server:
    ```bash
-   python app.py
+   python backend/app.py
    ```
 *The backend should now be running on http://localhost:5000*
 
 ### Start the Frontend (Next.js)
 
-Open a **new** terminal in the frontend directory:
+Open a **new** terminal in the root directory:
 
 ```bash
-cd SolveNest--main/SolveNest--main/frontend
+cd frontend
 ```
 1. Install Node modules:
    ```bash
