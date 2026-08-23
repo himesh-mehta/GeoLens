@@ -13,9 +13,9 @@ from datetime import datetime
 # ML Pipeline v4.0 - Spatial Leakage Fix & SAR Multi-Source
 # ============================================================
 
-INPUT_CSV = "SIH_SamePoints_2018_2024_Enriched.csv"
-MODEL_OUTPUT = "SIH_OUTPUT/SIH_LandCover_ExtraTrees_MultiSource.pkl"
-REPORT_JSON = "SIH_OUTPUT/full_model_validation.json"
+INPUT_CSV = "data/raw/SIH_SamePoints_2018_2024_Enriched.csv" if os.path.exists("data/raw/SIH_SamePoints_2018_2024_Enriched.csv") else "SIH_SamePoints_2018_2024_Enriched.csv"
+MODEL_OUTPUT = "data/results/SIH_LandCover_ExtraTrees_MultiSource.pkl"
+REPORT_JSON = "data/results/full_model_validation.json"
 
 LABEL_MAP = {
     0: 0, 1: 1, 2: 1, 3: 1, 5: 1,  # Water, Vegetation
@@ -199,7 +199,7 @@ def main():
     
     # Save the best model
     print(f"\nSaving Multi-Source model to {MODEL_OUTPUT}...")
-    os.makedirs("SIH_OUTPUT", exist_ok=True)
+    os.makedirs(os.path.dirname(MODEL_OUTPUT), exist_ok=True)
     bundle = {
         "model": res_multi["model"],
         "features": res_multi["features"],
