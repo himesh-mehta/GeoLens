@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌐 GeoLens / SolveNest — Conversational Earth Intelligence & EO Analytics
+# 🌐 GeoLens — Conversational Earth Intelligence & EO Analytics
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg)](https://nextjs.org/)
