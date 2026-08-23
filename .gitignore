@@ -16,12 +16,32 @@ __pycache__/
 *.so
 .Python
 
-# Large Models, Artifacts & Data
+# Large Models & Binary Artifacts
 *.pkl
 *.joblib
 *.h5
 *.onnx
-*.csv
+
+# Temporary Scratch & Local Test Files (Ignored)
+scratch/
+TEST/
+scratch_*.py
+ai_test_result.txt
+*.tmp
+*.log
+uploads/
+temp/
+tmp/
+
+# Keep Core Project Datasets & Sample Test Assets for Visitors
+!data/
+!data/raw/
+!data/raw/*.csv
+!data/results/
+!data/results/*.csv
+!data/results/*.json
+!tests/fixtures/
+!tests/fixtures/*
 
 # Node / Next.js
 node_modules/
@@ -48,11 +68,12 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Credentials
+# Credentials & JSON Exclusions
 *.json
 !package.json
 !tsconfig.json
-!SIH_OUTPUT/*.json
+!data/results/*.json
+!docs/*.json
 credentials.json
 service-account.json
 client_secret.json
