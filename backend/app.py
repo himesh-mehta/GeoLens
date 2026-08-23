@@ -42,6 +42,9 @@ import sys
 import io
 import csv
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Ensure backend root is on sys.path
 backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1030,9 +1033,9 @@ def analyze_shapefile():
                         "width": src.width,
                         "height": src.height,
                         "count": src.count,
-                        "dtypes": src.dtypes,
-                        "nodata": src.nodata,
-                        "bounds": [src.bounds.left, src.bounds.bottom, src.bounds.right, src.bounds.top]
+                        "dtypes": [str(d) for d in src.dtypes],
+                        "nodata": float(src.nodata) if src.nodata is not None else None,
+                        "bounds": [float(src.bounds.left), float(src.bounds.bottom), float(src.bounds.right), float(src.bounds.top)]
                     }
             except Exception as e:
                 logger.error(f"Failed to read GeoTIFF: {e}")
