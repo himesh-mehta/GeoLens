@@ -1,7 +1,10 @@
 import os
 import json
 import logging
-from groq import Groq
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,10 @@ import json
 import logging
 import threading
 from typing import Dict, Any, List, Optional
-import ee
-import geopandas as gpd
+try:
+    import geopandas as gpd
+except ImportError:
+    gpd = None
 
 logger = logging.getLogger(__name__)
 

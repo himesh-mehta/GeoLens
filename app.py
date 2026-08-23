@@ -412,6 +412,10 @@ def inspect_bands():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/api/eo", methods=["POST"])
+@app.route("/api/eo/analyze", methods=["POST"])
+def get_eo_post():
+    data = request.get_json() or {}
     point_id = data.get("point_id")
 
     if point_id is not None:
