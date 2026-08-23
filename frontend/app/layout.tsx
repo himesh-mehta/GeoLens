@@ -9,9 +9,12 @@ export const metadata: Metadata = {
   title: 'GeoLens — Conversational Earth Observation Intelligence',
   description: 'See Earth. Understand Better. Decide Smarter.',
   icons: {
-    icon: '/geolens-logo.png',
-    shortcut: '/geolens-logo.png',
-    apple: '/geolens-logo.png',
+    icon: [
+      { url: '/geolens-logo.svg', type: 'image/svg+xml' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/geolens-logo.svg',
+    apple: '/geolens-logo.svg',
   },
 };
 
