@@ -73,6 +73,8 @@ Thumbs.db
 *.json
 !package.json
 !tsconfig.json
+!vercel.json
+!frontend/vercel.json
 !data/results/*.json
 !docs/*.json
 credentials.json
