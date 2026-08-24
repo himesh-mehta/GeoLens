@@ -80,31 +80,61 @@ from vision_layer.vision_evaluator import EOVisionEvaluator
 from gpt_oss_layer.reasoning_engine import GPTOssReasoningEngine
 from gpt_oss_layer.ai_service import generate_ai_analysis, generate_structured_image_analysis
 
+from flask_cors import CORS
+
 app = Flask(__name__, template_folder="templates")
 
+# Initialize Flask-CORS for global preflight and error handling
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # ── CORS for Node.js / React / Vercel integration ─────────────────────────────
+def _is_origin_allowed(origin: Optional[str]) -> bool:
+    if not origin:
+        return True
+    allowed_env = os.environ.get("ALLOWED_ORIGIN", "").strip()
+    if not allowed_env or allowed_env == "*":
+        return True
+    
+    allowed_list = [o.strip().rstrip("/") for o in allowed_env.split(",") if o.strip()]
+    origin_clean = origin.strip().rstrip("/")
+    
+    if origin_clean in allowed_list or "*" in allowed_list:
+        return True
+    
+    # Always allow Vercel production & preview deployment domains (*.vercel.app)
+    if origin_clean.startswith("https://") and origin_clean.endswith(".vercel.app"):
+        return True
+
+    # Allow local development origins
+    if "localhost" in origin_clean or "127.0.0.1" in origin_clean:
+        return True
+        
+    return False
+
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin")
-    allowed = os.environ.get("ALLOWED_ORIGIN")
-    if allowed:
-        allowed_list = [o.strip() for o in allowed.split(",") if o.strip()]
-        if origin and (origin in allowed_list or "*" in allowed_list):
-            response.headers["Access-Control-Allow-Origin"] = origin
-        elif allowed_list:
-            response.headers["Access-Control-Allow-Origin"] = allowed_list[0]
-        else:
-            response.headers["Access-Control-Allow-Origin"] = "*"
+    if origin and _is_origin_allowed(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
     else:
         response.headers["Access-Control-Allow-Origin"] = "*"
+        
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 @app.route("/api/<path:path>", methods=["OPTIONS"])
 def handle_options(path):
-    return jsonify({"status": "ok"})
+    response = jsonify({"status": "ok"})
+    origin = request.headers.get("Origin")
+    if origin and _is_origin_allowed(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    return response, 200
 
 
 # ── Service Initialization ────────────────────────────────────────────────────
