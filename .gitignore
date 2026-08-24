@@ -21,6 +21,7 @@ __pycache__/
 *.joblib
 *.h5
 *.onnx
+!data/results/SIH_LandCover_ExtraTrees_MultiSource.pkl
 
 # Temporary Scratch & Local Test Files (Ignored)
 scratch/

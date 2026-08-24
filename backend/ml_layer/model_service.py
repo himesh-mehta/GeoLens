@@ -80,12 +80,20 @@ class ModelService:
         loro_csv_path: str = "data/results/spatial_validation_LORO.csv",
         feedback_log_path: str = "data/results/human_review_log.json"
     ):
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
         def _resolve_path(p: str, legacy_fallback: str) -> str:
-            if os.path.exists(p):
-                return p
-            if os.path.exists(legacy_fallback):
-                return legacy_fallback
-            return p
+            candidates = [
+                p,
+                os.path.join(base_dir, p),
+                legacy_fallback,
+                os.path.join(base_dir, legacy_fallback)
+            ]
+            for cand in candidates:
+                if cand and os.path.exists(cand):
+                    return os.path.abspath(cand)
+            # Default to absolute path from base_dir if none exist yet
+            return os.path.abspath(os.path.join(base_dir, p))
 
         self.model_path = _resolve_path(model_path, "SIH_OUTPUT/SIH_LandCover_ExtraTrees_MultiSource.pkl")
         self.fallback_model_path = _resolve_path(fallback_model_path, "SIH_OUTPUT/SIH_LandCover_RandomForest.pkl")
@@ -115,13 +123,28 @@ class ModelService:
     def _load_resources(self):
         """Load active model, predictions, raw features, and all audit files."""
         chosen_path = self.model_path if os.path.exists(self.model_path) else self.fallback_model_path
-        if os.path.exists(chosen_path):
-            self.model_bundle = joblib.load(chosen_path)
-            self.active_model = self.model_bundle.get("model")
-            self.feature_names = self.model_bundle.get("features", self.BASE_FEATURE_NAMES)
-            print(f"[ModelService] Loaded: {self.model_bundle.get('model_name', 'Unknown')}")
+        file_exists = os.path.exists(chosen_path)
+        model_filename = os.path.basename(chosen_path)
+
+        logger.info(f"[ModelService] Model path: {chosen_path}")
+        logger.info(f"[ModelService] Model exists: {file_exists}")
+        print(f"[ModelService] Model path: {chosen_path}")
+        print(f"[ModelService] Model exists: {file_exists}")
+
+        if file_exists:
+            try:
+                self.model_bundle = joblib.load(chosen_path)
+                self.active_model = self.model_bundle.get("model")
+                self.feature_names = self.model_bundle.get("features", self.BASE_FEATURE_NAMES)
+                model_name = self.model_bundle.get('model_name', model_filename)
+                logger.info(f"[ModelService] Loaded model: {model_filename} ({model_name})")
+                print(f"[ModelService] Loaded model: {model_filename} ({model_name})")
+            except Exception as e:
+                logger.error(f"[ModelService] Failed to load model from {chosen_path}: {e}")
+                print(f"[ModelService] WARNING: Failed to load model: {e}")
         else:
-            print("[ModelService] WARNING: No model file found.")
+            logger.warning(f"[ModelService] WARNING: No model file found at {chosen_path}.")
+            print(f"[ModelService] WARNING: No model file found at {chosen_path}.")
 
         if os.path.exists(self.predictions_path):
             self.predictions_df = pd.read_csv(self.predictions_path)
