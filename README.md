@@ -1,3 +1,5 @@
+<div align="center">
+
 # 🌍 GeoLens — Earth Intelligence & Conversational Analytics Platform
 
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?style=flat-square&logo=next.js)](https://nextjs.org/)
@@ -7,11 +9,15 @@
 [![Groq LLM](https://img.shields.io/badge/Orbit_AI-Groq_LLM-F05032?style=flat-square)](https://groq.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
+<br/>
+
 **GeoLens** is an advanced Earth Observation (EO) and Geospatial AI platform built to analyze satellite imagery, monitor land-use change, and provide natural language conversational insights anywhere across India. Powered by **Google Earth Engine (Sentinel-2)**, **ExtraTrees ML Classifiers**, and **Orbit — the Earth Intelligence AI Assistant**, GeoLens translates complex remote sensing data into actionable insights.
+
+</div>
 
 ---
 
-## 📸 Platform Highlights
+<h2 align="center">📸 Platform Highlights</h2>
 
 <p align="center">
   <img src="docs/screenshots/home_dashboard.png" width="49%" alt="GeoLens Home Dashboard" />
