@@ -127,9 +127,12 @@ class EOVisionExtractor:
 
     def analyze_files(self, files_list, ml_service=None) -> Dict[str, Any]:
         import io
+        import os
         import time
         import logging
         import gc
+        import re
+        import tempfile
         import numpy as np
         from PIL import Image
 
@@ -139,7 +142,6 @@ class EOVisionExtractor:
         if not files_list:
             raise ValueError("No files provided for analysis.")
 
-        # Limit maximum number of uploaded band files to 8 for Render memory safety
         if len(files_list) > 8:
             return {"success": False, "error": "Maximum 8 band files can be uploaded at once."}
 
@@ -150,185 +152,197 @@ class EOVisionExtractor:
             # ---------------------------------------------------------
             # MULTI-FILE SENTINEL-2 MODE
             # ---------------------------------------------------------
-            if len(files_list) > 1 or (len(files_list) == 1 and any(b in files_list[0][0].upper() for b in ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"])):
-                import rasterio
-                from rasterio.io import MemoryFile
-                from rasterio.warp import reproject, Resampling
-                import re
+            is_sentinel = len(files_list) > 1 or (
+                len(files_list) == 1 and any(
+                    b in files_list[0][0].upper()
+                    for b in ["B01","B02","B03","B04","B05","B06","B07","B08","B8A","B09","B11","B12"]
+                )
+            )
 
-                parsed_bands = {}
+            if is_sentinel:
+                import rasterio
+                from rasterio.windows import Window
+
                 band_meta = {}
                 geo_referenced = False
-                
-                # 1. Identify bands first
                 reference_band = None
-                
-                for filename, file_bytes in files_list:
-                    upper_name = filename.upper()
-                    band_id = None
-                    if re.search(r'[\._\-]B8A[\._\-]|B8A(?=\.\w+$)|\bB8A\b', upper_name): band_id = "B8A"
-                    elif re.search(r'[\._\-]B0?1[\._\-]|B0?1(?=\.\w+$)|\bB0?1\b', upper_name): band_id = "B01"
-                    elif re.search(r'[\._\-]B0?2[\._\-]|B0?2(?=\.\w+$)|\bB0?2\b', upper_name): band_id = "B02"
-                    elif re.search(r'[\._\-]B0?3[\._\-]|B0?3(?=\.\w+$)|\bB0?3\b', upper_name): band_id = "B03"
-                    elif re.search(r'[\._\-]B0?4[\._\-]|B0?4(?=\.\w+$)|\bB0?4\b', upper_name): band_id = "B04"
-                    elif re.search(r'[\._\-]B0?5[\._\-]|B0?5(?=\.\w+$)|\bB0?5\b', upper_name): band_id = "B05"
-                    elif re.search(r'[\._\-]B0?6[\._\-]|B0?6(?=\.\w+$)|\bB0?6\b', upper_name): band_id = "B06"
-                    elif re.search(r'[\._\-]B0?7[\._\-]|B0?7(?=\.\w+$)|\bB0?7\b', upper_name): band_id = "B07"
-                    elif re.search(r'[\._\-]B0?8[\._\-]|B0?8(?=\.\w+$)|\bB0?8\b', upper_name): band_id = "B08"
-                    elif re.search(r'[\._\-]B0?9[\._\-]|B0?9(?=\.\w+$)|\bB0?9\b', upper_name): band_id = "B09"
-                    elif re.search(r'[\._\-]B11[\._\-]|B11(?=\.\w+$)|\bB11\b', upper_name): band_id = "B11"
-                    elif re.search(r'[\._\-]B12[\._\-]|B12(?=\.\w+$)|\bB12\b', upper_name): band_id = "B12"
-                    
-                    if not band_id:
-                        continue
-                        
-                    parsed_bands[band_id] = file_bytes
-                    if band_id in ["B02", "B03", "B04", "B08"] and not reference_band:
-                        reference_band = band_id
 
-                if not parsed_bands:
+                # 1. Identify band IDs from filenames (no file reading yet)
+                band_id_map = {}   # band_id -> index in files_list
+                for idx, (filename, _) in enumerate(files_list):
+                    upper_name = filename.upper()
+                    bid = None
+                    if re.search(r'[\._\-]B8A[\._\-]|B8A(?=\.\w+$)|\bB8A\b', upper_name): bid = "B8A"
+                    elif re.search(r'[\._\-]B0?2[\._\-]|B0?2(?=\.\w+$)|\bB0?2\b', upper_name): bid = "B02"
+                    elif re.search(r'[\._\-]B0?3[\._\-]|B0?3(?=\.\w+$)|\bB0?3\b', upper_name): bid = "B03"
+                    elif re.search(r'[\._\-]B0?4[\._\-]|B0?4(?=\.\w+$)|\bB0?4\b', upper_name): bid = "B04"
+                    elif re.search(r'[\._\-]B0?8[\._\-]|B0?8(?=\.\w+$)|\bB0?8\b', upper_name): bid = "B08"
+                    elif re.search(r'[\._\-]B11[\._\-]|B11(?=\.\w+$)|\bB11\b', upper_name): bid = "B11"
+                    elif re.search(r'[\._\-]B12[\._\-]|B12(?=\.\w+$)|\bB12\b', upper_name): bid = "B12"
+                    elif re.search(r'[\._\-]B0?1[\._\-]|B0?1(?=\.\w+$)|\bB0?1\b', upper_name): bid = "B01"
+                    elif re.search(r'[\._\-]B0?5[\._\-]|B0?5(?=\.\w+$)|\bB0?5\b', upper_name): bid = "B05"
+                    elif re.search(r'[\._\-]B0?6[\._\-]|B0?6(?=\.\w+$)|\bB0?6\b', upper_name): bid = "B06"
+                    elif re.search(r'[\._\-]B0?7[\._\-]|B0?7(?=\.\w+$)|\bB0?7\b', upper_name): bid = "B07"
+                    elif re.search(r'[\._\-]B0?9[\._\-]|B0?9(?=\.\w+$)|\bB0?9\b', upper_name): bid = "B09"
+                    if bid:
+                        band_id_map[bid] = idx
+                        if bid in ["B02","B03","B04","B08"] and reference_band is None:
+                            reference_band = bid
+
+                if not band_id_map:
                     if len(files_list) == 1:
-                        pass # Fallback to visual mode
+                        pass  # fall through to visual mode
                     else:
                         return {"success": False, "error": "No recognizable Sentinel-2 bands found in uploaded files."}
-                
-                if parsed_bands:
-                    if not reference_band:
-                        reference_band = list(parsed_bands.keys())[0]
+
+                if band_id_map:
+                    if reference_band is None:
+                        reference_band = list(band_id_map.keys())[0]
+
+                    # ── DISK-BASED READING ──────────────────────────────────────────
+                    # Write TIFFs to /tmp one at a time, read a center 1000×1000
+                    # window from disk (GDAL decompresses only the needed tiles,
+                    # never the full 10980×10980 image → stays within 512 MB RAM).
+                    tmp_dir = tempfile.gettempdir()
+                    tmp_paths = {}   # band_id -> tmp file path
+
+                    def write_band_to_tmp(band_id, file_bytes):
+                        """Write bytes to a uniquely named temp TIFF."""
+                        path = os.path.join(tmp_dir, f"gl_{band_id}_{os.getpid()}.tif")
+                        with open(path, "wb") as fh:
+                            fh.write(file_bytes)
+                        return path
+
+                    def read_band_window(path, target_w, target_h, src_w=None, src_h=None):
+                        """Read a center window (target_w × target_h) from a TIFF on disk.
+                        Uses rasterio Window so GDAL decompresses only the needed tiles."""
+                        with rasterio.open(path) as src:
+                            w, h = src.width, src.height
+                            # Center window capped at target size
+                            win_w = min(w, target_w)
+                            win_h = min(h, target_h)
+                            col_off = (w - win_w) // 2
+                            row_off = (h - win_h) // 2
+                            window = Window(col_off, row_off, win_w, win_h)
+                            arr = src.read(1, window=window).astype(np.float32)
+                            return arr, src.profile.copy(), src.transform, src.crs, w, h
 
                     arrays = {}
                     ref_profile = None
                     ref_transform = None
                     ref_crs = None
                     resampling_info = []
+                    orig_w_ref = orig_h_ref = 0
 
-                    # 2. Extract reference metadata with downsampling for huge rasters
+                    # Sample window size — enough for good statistics, tiny RAM cost
+                    SAMPLE_W = 1000
+                    SAMPLE_H = 1000
+
+                    # 2. Write reference band to disk and sample
                     logger.info(f"[ImageAnalysis] reading {reference_band}")
                     print(f"[ImageAnalysis] reading {reference_band}")
+                    ref_bytes = files_list[band_id_map[reference_band]][1]
+                    ref_size_mb = len(ref_bytes) / (1024*1024)
+                    print(f"[ImageAnalysis] {reference_band} file size = {ref_size_mb:.1f} MB")
                     try:
-                        with MemoryFile(parsed_bands[reference_band]) as memfile:
-                            with memfile.open() as src:
-                                ref_profile = src.profile.copy()
-                                ref_transform = src.transform
-                                ref_crs = src.crs
-                                geo_referenced = (ref_crs is not None)
+                        ref_path = write_band_to_tmp(reference_band, ref_bytes)
+                        tmp_paths[reference_band] = ref_path
+                        del ref_bytes
+                        gc.collect()
 
-                                max_dim = 1000
-                                orig_h, orig_w = src.height, src.width
-                                scale = min(1.0, max_dim / max(orig_h, orig_w))
-                                target_h = max(100, int(orig_h * scale))
-                                target_w = max(100, int(orig_w * scale))
-
-                                ref_profile['height'] = target_h
-                                ref_profile['width'] = target_w
-
-                                if scale < 1.0:
-                                    arrays[reference_band] = src.read(
-                                        1,
-                                        out_shape=(target_h, target_w),
-                                        resampling=Resampling.bilinear
-                                    ).astype(np.float32)
-                                    resampling_info.append(f"Grid downsampled ({orig_w}x{orig_h} -> {target_w}x{target_h}) for memory safety")
-                                else:
-                                    arrays[reference_band] = src.read(1).astype(np.float32)
-
-                                band_meta[reference_band] = "10m" if reference_band in ["B02", "B03", "B04", "B08"] else "Unknown"
+                        arr, ref_profile, ref_transform, ref_crs, orig_w_ref, orig_h_ref = \
+                            read_band_window(ref_path, SAMPLE_W, SAMPLE_H)
+                        arrays[reference_band] = arr
+                        geo_referenced = (ref_crs is not None)
+                        ref_profile['width'] = arr.shape[1]
+                        ref_profile['height'] = arr.shape[0]
+                        band_meta[reference_band] = "10m" if reference_band in ["B02","B03","B04","B08"] else "Unknown"
+                        resampling_info.append(
+                            f"Center window sampled ({orig_w_ref}×{orig_h_ref} → {arr.shape[1]}×{arr.shape[0]})"
+                        )
                     except Exception as e:
                         return {"success": False, "error": f"Failed to read reference band {reference_band}: {str(e)}"}
 
-                    # 3. Read and resample other bands sequentially
-                    for b_id in list(parsed_bands.keys()):
+                    # 3. Write and read other bands sequentially
+                    for b_id, idx in band_id_map.items():
                         if b_id == reference_band:
                             continue
 
                         logger.info(f"[ImageAnalysis] reading {b_id}")
                         print(f"[ImageAnalysis] reading {b_id}")
-
-                        b_bytes = parsed_bands[b_id]
+                        b_bytes = files_list[idx][1]
+                        b_size_mb = len(b_bytes) / (1024*1024)
+                        print(f"[ImageAnalysis] {b_id} file size = {b_size_mb:.1f} MB")
                         try:
-                            with MemoryFile(b_bytes) as memfile:
-                                with memfile.open() as src:
-                                    is_20m = b_id in ["B05", "B06", "B07", "B8A", "B11", "B12"]
-                                    band_meta[b_id] = "20m" if is_20m else ("10m" if b_id in ["B02", "B03", "B04", "B08"] else "Unknown")
+                            b_path = write_band_to_tmp(b_id, b_bytes)
+                            tmp_paths[b_id] = b_path
+                            del b_bytes
+                            gc.collect()
 
-                                    if src.width != target_w or src.height != target_h:
-                                        resampling_info.append(f"{b_id} aligned to reference grid ({target_w}x{target_h})")
-                                        dst_array = np.zeros((target_h, target_w), dtype=np.float32)
-                                        src_crs = src.crs if src.crs else ref_crs
-
-                                        reproject(
-                                            source=rasterio.band(src, 1),
-                                            destination=dst_array,
-                                            src_transform=src.transform,
-                                            src_crs=src_crs,
-                                            dst_transform=ref_transform,
-                                            dst_crs=ref_crs,
-                                            resampling=Resampling.bilinear
-                                        )
-                                        arrays[b_id] = dst_array
-                                    else:
-                                        arrays[b_id] = src.read(1).astype(np.float32)
+                            arr, _, _, _, bw, bh = read_band_window(b_path, SAMPLE_W, SAMPLE_H)
+                            arrays[b_id] = arr
+                            is_20m = b_id in ["B05","B06","B07","B8A","B11","B12"]
+                            band_meta[b_id] = "20m" if is_20m else "10m"
                         except Exception as e:
-                            return {"success": False, "error": f"Failed to read or resample band {b_id}: {str(e)}"}
+                            return {"success": False, "error": f"Failed to read band {b_id}: {str(e)}"}
 
-                    # Release raw byte memory immediately
-                    del parsed_bands
+                    # 4. Clean up temp files immediately
+                    for path in tmp_paths.values():
+                        try:
+                            os.remove(path)
+                        except Exception:
+                            pass
+                    tmp_paths.clear()
                     gc.collect()
 
-                    # 4. Calculate indices
+                    # 5. Calculate spectral indices
                     logger.info("[ImageAnalysis] calculating indices")
                     print("[ImageAnalysis] calculating indices")
 
+                    # Replace zeros to avoid division issues
                     for b in arrays:
                         arrays[b] = np.where(arrays[b] == 0, 1e-5, arrays[b])
 
                     first_band = list(arrays.values())[0]
-                    total_pixels = float(first_band.shape[0] * first_band.shape[1])
-                    valid_mask = ~np.isnan(first_band)
-                    valid_pixels = float(np.sum(valid_mask))
+                    total_pixels = float(first_band.size)
+                    valid_pixels = float(np.sum(~np.isnan(first_band)))
                     valid_pixel_pct = (valid_pixels / total_pixels * 100.0) if total_pixels > 0 else 0
                     nodata_pct = 100.0 - valid_pixel_pct
 
+                    eps = 1e-8
+
                     # NDVI
-                    ndvi_val = None
                     if "B08" in arrays and "B04" in arrays:
-                        nir = arrays["B08"]
-                        red = arrays["B04"]
-                        ndvi_map = (nir - red) / (nir + red + 1e-8)
+                        ndvi_map = (arrays["B08"] - arrays["B04"]) / (arrays["B08"] + arrays["B04"] + eps)
                         ndvi_val = round(float(np.nanmean(ndvi_map)), 4)
+                        del ndvi_map
                     else:
-                        ndvi_val = "NDVI unavailable — NIR band B08 or Red band B04 is required."
+                        ndvi_val = "NDVI unavailable — NIR B08 or Red B04 missing."
 
                     # NDWI
-                    ndwi_val = None
                     if "B03" in arrays and "B08" in arrays:
-                        green = arrays["B03"]
-                        nir = arrays["B08"]
-                        ndwi_map = (green - nir) / (green + nir + 1e-8)
+                        ndwi_map = (arrays["B03"] - arrays["B08"]) / (arrays["B03"] + arrays["B08"] + eps)
                         ndwi_val = round(float(np.nanmean(ndwi_map)), 4)
+                        del ndwi_map
                     else:
-                        ndwi_val = "NDWI unavailable — Green B03 and NIR B08 are required."
+                        ndwi_val = "NDWI unavailable — Green B03 and NIR B08 required."
 
                     # NDBI
-                    ndbi_val = None
                     if "B11" in arrays and "B08" in arrays:
-                        swir = arrays["B11"]
-                        nir = arrays["B08"]
-                        ndbi_map = (swir - nir) / (swir + nir + 1e-8)
+                        ndbi_map = (arrays["B11"] - arrays["B08"]) / (arrays["B11"] + arrays["B08"] + eps)
                         ndbi_val = round(float(np.nanmean(ndbi_map)), 4)
+                        del ndbi_map
                     else:
-                        ndbi_val = "NDBI unavailable — NIR B08 and SWIR B11 are required."
+                        ndbi_val = "NDBI unavailable — SWIR B11 and NIR B08 required."
 
                     # EVI
                     evi_val = None
                     if "B08" in arrays and "B04" in arrays and "B02" in arrays:
-                        nir = arrays["B08"]
-                        red = arrays["B04"]
-                        blue = arrays["B02"]
-                        evi_map = 2.5 * ((nir - red) / (nir + 6.0 * red - 7.5 * blue + 1.0 + 1e-8))
+                        evi_map = 2.5 * ((arrays["B08"] - arrays["B04"]) / (arrays["B08"] + 6.0 * arrays["B04"] - 7.5 * arrays["B02"] + 1.0 + eps))
                         evi_val = round(float(np.nanmean(evi_map)), 4)
+                        del evi_map
 
-                    # 5. Features and ExtraTrees Prediction
+                    # 6. ExtraTrees prediction (uses per-band mean scalars — zero array cost)
                     logger.info("[ImageAnalysis] preparing features")
                     print("[ImageAnalysis] preparing features")
 
@@ -339,54 +353,50 @@ class EOVisionExtractor:
                         try:
                             logger.info("[ImageAnalysis] running ExtraTrees prediction")
                             print("[ImageAnalysis] running ExtraTrees prediction")
-                            
-                            # Construct 26-feature array for model inference using mean band values
-                            feat_dict = {}
-                            for b_name in ["B2", "B3", "B4", "B8", "B11", "B12"]:
-                                alt_b = f"B0{b_name[1]}" if len(b_name) == 2 and b_name[1].isdigit() else b_name
-                                b_arr = arrays.get(alt_b) if alt_b in arrays else arrays.get(f"B0{b_name[1]}" if len(b_name) == 2 else b_name)
-                                feat_dict[b_name] = float(np.nanmean(b_arr)) if b_arr is not None else 0.1
 
-                            b2_v, b3_v, b4_v = feat_dict.get("B2", 0.1), feat_dict.get("B3", 0.1), feat_dict.get("B4", 0.1)
-                            b8_v, b11_v, b12_v = feat_dict.get("B8", 0.1), feat_dict.get("B11", 0.1), feat_dict.get("B12", 0.1)
+                            def mean_val(bid):
+                                arr = arrays.get(bid)
+                                return float(np.nanmean(arr)) if arr is not None else 0.1
 
-                            eps = 1e-8
-                            ndvi_f = (b8_v - b4_v) / (b8_v + b4_v + eps)
-                            ndwi_f = (b3_v - b8_v) / (b3_v + b8_v + eps)
+                            b2_v = mean_val("B02"); b3_v = mean_val("B03"); b4_v = mean_val("B04")
+                            b8_v = mean_val("B08"); b11_v = mean_val("B11"); b12_v = mean_val("B12")
+
+                            ndvi_f  = (b8_v - b4_v)  / (b8_v + b4_v  + eps)
+                            ndwi_f  = (b3_v - b8_v)  / (b3_v + b8_v  + eps)
                             mndwi_f = (b3_v - b11_v) / (b3_v + b11_v + eps)
-                            ndbi_f = (b11_v - b8_v) / (b11_v + b8_v + eps)
-                            bsi_f = ((b11_v + b4_v) - (b8_v + b2_v)) / ((b11_v + b4_v) + (b8_v + b2_v) + eps)
-                            savi_f = 1.5 * (b8_v - b4_v) / (b8_v + b4_v + 0.5 + eps)
-                            nbr_f = (b8_v - b12_v) / (b8_v + b12_v + eps)
-                            evi_f = 2.5 * ((b8_v - b4_v) / (b8_v + 6.0 * b4_v - 7.5 * b2_v + 1.0 + eps))
-                            ui_f = (b12_v - b8_v) / (b12_v + b8_v + eps)
-                            ndmi_f = (b8_v - b11_v) / (b8_v + b11_v + eps)
-                            grvi_f = (b3_v - b4_v) / (b3_v + b4_v + eps)
-                            brightness_f = (b2_v + b3_v + b4_v + b8_v) / 4.0
-                            greenness_f = (b3_v + b8_v) / 2.0
-                            swir_ratio_f = b11_v / (b12_v + eps)
-                            nir_red_ratio_f = b8_v / (b4_v + eps)
-                            nir_green_ratio_f = b8_v / (b3_v + eps)
-                            ndbi_ndvi_diff_f = ndbi_f - ndvi_f
+                            ndbi_f  = (b11_v - b8_v) / (b11_v + b8_v + eps)
+                            bsi_f   = ((b11_v + b4_v) - (b8_v + b2_v)) / ((b11_v + b4_v) + (b8_v + b2_v) + eps)
+                            savi_f  = 1.5 * (b8_v - b4_v) / (b8_v + b4_v + 0.5 + eps)
+                            nbr_f   = (b8_v - b12_v) / (b8_v + b12_v + eps)
+                            evi_f   = 2.5 * ((b8_v - b4_v) / (b8_v + 6.0*b4_v - 7.5*b2_v + 1.0 + eps))
+                            ui_f    = (b12_v - b8_v) / (b12_v + b8_v + eps)
+                            ndmi_f  = (b8_v - b11_v) / (b8_v + b11_v + eps)
+                            grvi_f  = (b3_v - b4_v)  / (b3_v + b4_v  + eps)
+                            brightness_f     = (b2_v + b3_v + b4_v + b8_v) / 4.0
+                            greenness_f      = (b3_v + b8_v) / 2.0
+                            swir_ratio_f     = b11_v / (b12_v + eps)
+                            nir_red_ratio_f  = b8_v  / (b4_v  + eps)
+                            nir_green_ratio_f = b8_v / (b3_v  + eps)
+                            ndbi_ndvi_diff_f  = ndbi_f  - ndvi_f
                             mndwi_ndvi_diff_f = mndwi_f - ndvi_f
 
                             sample_row = np.array([[
                                 b2_v, b3_v, b4_v, b8_v, b11_v, b12_v,
                                 ndvi_f, ndwi_f, mndwi_f, ndbi_f,
                                 bsi_f, savi_f, nbr_f, evi_f, ui_f, ndmi_f, grvi_f,
-                                brightness_f, greenness_f, swir_ratio_f, nir_red_ratio_f, nir_green_ratio_f,
+                                brightness_f, greenness_f, swir_ratio_f,
+                                nir_red_ratio_f, nir_green_ratio_f,
                                 ndbi_ndvi_diff_f, mndwi_ndvi_diff_f,
-                                0.0, 0.0  # VV, VH default
+                                0.0, 0.0  # VV, VH SAR defaults
                             ]], dtype=np.float32)
 
                             preds = ml_service.active_model.predict(sample_row)
                             probs = ml_service.active_model.predict_proba(sample_row)
-                            
                             pred_idx = int(preds[0])
                             pred_class = ml_service.CLASS_NAMES.get(pred_idx, "Unknown")
                             pred_confidence = round(float(np.max(probs[0])), 2)
                         except Exception as p_err:
-                            logger.warning(f"[ImageAnalysis] ExtraTrees prediction fallback: {p_err}")
+                            logger.warning(f"[ImageAnalysis] ExtraTrees fallback: {p_err}")
 
                     if pred_class == "Unknown":
                         if isinstance(ndvi_val, float) and ndvi_val > 0.3:
@@ -398,7 +408,6 @@ class EOVisionExtractor:
                         else:
                             pred_class = "Barren / Mixed"
 
-                    # Interpretations
                     def get_interpretation(index_name, val):
                         if not isinstance(val, float): return None
                         if index_name == "ndvi":
@@ -407,18 +416,17 @@ class EOVisionExtractor:
                             if val < 0.5: return "Moderate vegetation (shrubs/grass)."
                             return "High vegetation signal (dense canopy)."
                         if index_name == "ndwi":
-                            if val > 0: return "Water surface detected."
-                            return "Low water/moisture signal."
+                            return "Water surface detected." if val > 0 else "Low water/moisture signal."
                         if index_name == "ndbi":
-                            if val > 0: return "High built-up/urban signature."
-                            return "Low built-up signal."
+                            return "High built-up/urban signature." if val > 0 else "Low built-up signal."
                         return None
 
                     bands_str = ", ".join(arrays.keys())
-                    analysis_text = f"Analyzed {len(arrays)} bands from GeoTIFFs ({bands_str}). "
-                    analysis_text += "Note: Spectral index formulas (like NDVI) use relative band ratios, so any uniform Sentinel-2 scaling factor (e.g., 10000) cancels out mathematically. Index values are true unscaled reflectances. "
-                    if resampling_info:
-                        analysis_text += " " + ", ".join(resampling_info) + "."
+                    analysis_text = (
+                        f"Analyzed {len(arrays)} Sentinel-2 bands ({bands_str}) via 1000×1000 center-window sampling. "
+                        "Spectral index values use relative band ratios (NDVI, NDWI, NDBI) which are scale-invariant. "
+                        + ((" ".join(resampling_info) + ".") if resampling_info else "")
+                    )
 
                     logger.info("[ImageAnalysis] generating response")
                     print("[ImageAnalysis] generating response")
@@ -428,14 +436,11 @@ class EOVisionExtractor:
                         "source": "Sentinel-2 GeoTIFF",
                         "verification": "Spectral data verified",
                         "is_quantitative": True,
-                        "prediction": {
-                            "class": pred_class,
-                            "confidence": pred_confidence
-                        },
+                        "prediction": {"class": pred_class, "confidence": pred_confidence},
                         "accuracy": None,
                         "image_quality": {
-                            "width": ref_profile['width'],
-                            "height": ref_profile['height'],
+                            "width":  arrays[reference_band].shape[1] if reference_band in arrays else SAMPLE_W,
+                            "height": arrays[reference_band].shape[0] if reference_band in arrays else SAMPLE_H,
                             "bands": len(arrays),
                             "valid_pixel_percentage": round(valid_pixel_pct, 1),
                             "nodata_percentage": round(nodata_pct, 1),
@@ -447,7 +452,7 @@ class EOVisionExtractor:
                         "spectral_indices": {
                             "ndvi": {"value": ndvi_val, "interpretation": get_interpretation("ndvi", ndvi_val)},
                             "ndwi": {"value": ndwi_val, "interpretation": get_interpretation("ndwi", ndwi_val)},
-                            "ndbi": {"value": ndbi_val, "interpretation": get_interpretation("ndbi", ndbi_val)}
+                            "ndbi": {"value": ndbi_val, "interpretation": get_interpretation("ndbi", ndbi_val)},
                         },
                         "analysis": analysis_text
                     }
