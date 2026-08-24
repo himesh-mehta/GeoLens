@@ -13,17 +13,14 @@
 
 ## 📸 Platform Highlights
 
-### 🏠 Home Dashboard
-> *Overview of system metrics, feature modules, and real-time connectivity status to Google Earth Engine and Sentinel-2 pipelines.*
+<p align="center">
+  <img src="docs/screenshots/home_dashboard.png" width="49%" alt="GeoLens Home Dashboard" />
+  <img src="docs/screenshots/map_explorer.png" width="49%" alt="GeoLens Map Explorer" />
+</p>
 
-![GeoLens Home Dashboard](docs/screenshots/home_dashboard.png)
-
----
-
-### 🗺️ Interactive Map Explorer
-> *Location search, point & polygon AOI selection, dynamic spectral index calculations (`NDVI`, `NDWI`, `NDBI`), and spatial feature filtering.*
-
-![GeoLens Map Explorer](docs/screenshots/map_explorer.png)
+<p align="center">
+  <i>Left: <b>Home Dashboard & System Overview</b> &nbsp;•&nbsp; Right: <b>Interactive Map Explorer & AOI Analytics</b></i>
+</p>
 
 ---
 
