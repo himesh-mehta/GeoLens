@@ -12,11 +12,15 @@ export interface AIQuestionContext {
   findings?: Finding[] | ChangeFinding[];
   selectedFindingId?: string;
   comparison?: ComparisonResult;
+  analysisResult?: any;
+  page?: string;
+  [key: string]: any;
 }
 
 export interface AIResponse {
   answer: string;
   findingIds?: string[];
+  relevantFindingIds?: string[];
 }
 
 export interface Message {
@@ -26,16 +30,26 @@ export interface Message {
   findingIds?: string[];
 }
 
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const aiService = {
   /**
    * Submit a contextual query to the GPT-OSS reasoning assistant.
    */
-  askQuestion: async (question: string, context: AIQuestionContext): Promise<AIResponse> => {
+  askQuestion: async (
+    question: string, 
+    context: AIQuestionContext, 
+    language?: LangCode | string, 
+    history?: ConversationTurn[]
+  ): Promise<AIResponse> => {
     const q = question.toLowerCase().trim();
     const locName = context.areaName || context.locationId || "Jaipur";
-    const lang = context.language || 'en';
+    const lang = (language as LangCode) || context.language || 'en';
 
     // Helper to find finding ID by category
     const findIdByCategory = (cat: 'vegetation' | 'built-up' | 'water' | 'agriculture' | 'barren'): string[] => {
@@ -62,19 +76,37 @@ export const aiService = {
       // 1. Try calling the structured GPT-OSS /api/reason endpoint first
       const reasonRes = await BackendAPI.reasonWithEvidence({
         question: enrichedQuestion,
-        region: locName
+        region: locName,
+        context: {
+          ...(context.analysisResult || context),
+          language: lang,
+          conversation_history: history || []
+        }
       });
 
-      if (reasonRes && reasonRes.status === "success" && reasonRes.answer) {
+      if (reasonRes && reasonRes.status === "success" && reasonRes.answer && !reasonRes.answer.includes("Cannot answer query")) {
         return {
           answer: reasonRes.answer,
           findingIds: targetIds.length > 0 ? targetIds : undefined
         };
       }
 
-      // 2. Fallback to /api/ask chat endpoint
+      // 2. Try calling /api/ai/analyze endpoint
+      const aiAnalyzeRes = await BackendAPI.aiAnalyze({
+        question: enrichedQuestion,
+        analysis_result: context.analysisResult || context,
+        context: { region: locName, language: lang }
+      });
+      if (aiAnalyzeRes && aiAnalyzeRes.status === "success" && aiAnalyzeRes.analysis) {
+        return {
+          answer: aiAnalyzeRes.analysis,
+          findingIds: targetIds.length > 0 ? targetIds : undefined
+        };
+      }
+
+      // 3. Fallback to /api/ask chat endpoint
       const askRes = await BackendAPI.askGPTOSS(question, locName);
-      if (askRes && askRes.status === "success" && askRes.explanation) {
+      if (askRes && askRes.status === "success" && askRes.explanation && !askRes.explanation.includes("Cannot answer query")) {
         return {
           answer: askRes.explanation,
           findingIds: targetIds.length > 0 ? targetIds : undefined
@@ -84,39 +116,30 @@ export const aiService = {
       console.warn("[AI Service] GPT-OSS backend unreachable, using semantic fallback:", err);
     }
 
-    // Offline multilingual semantic fallback
+    // Network disconnected fallback
     await delay(300);
-
-    if (q.includes("vegetation") || q.includes("forest") || q.includes("crops") || q.includes("वनस्पति")) {
-      const answers: Record<LangCode, string> = {
-        en: `**[ML Results]** In ${locName}, vegetation coverage changed from 2018 to 2024 with active canopy shifts detected in peripheral agricultural plots.\n\n**[EO Vision]** Sentinel-2 False Color Infrared (FCC) shows localized drops in Near-Infrared reflectance.\n\n**[GPT-OSS Reasoning]** Hypothesis (unconfirmed by classification data alone): Canopy loss aligns with peri-urban expansion corridors.`,
-        hi: `**[ML Results]** ${locName} में 2018 से 2024 के बीच वनस्पति क्षेत्र में बदलाव देखा गया है।\n\n**[EO Vision]** उपग्रह अवलोकनों से वनस्पति आवरण में कमी का पता चलता है।`,
-        mr: `**[ML Results]** ${locName} मध्ये 2018 ते 2024 दरम्यान वनस्पती आच्छादनात बदल नोंदवला गेला आहे.`
-      };
-      return { answer: answers[lang] || answers.en, findingIds: targetIds };
-    }
-
-    if (q.includes("built-up") || q.includes("urban") || q.includes("construction") || q.includes("इमारत")) {
-      const answers: Record<LangCode, string> = {
-        en: `**[ML Results]** Developed built-up structures in ${locName} expanded by ~8.2% between 2018 and 2024.\n\n**[EO Vision]** High-frequency SWIR reflectance confirms concrete and road network growth.\n\n**[GPT-OSS Reasoning]** Hypothesis (unconfirmed): Infrastructure expansion is concentrated along major arterial transport corridors.`,
-        hi: `**[ML Results]** ${locName} में 2018 से 2024 के बीच निर्मित क्षेत्रों में वृद्धि दर्ज की गई है।`,
-        mr: `**[ML Results]** ${locName} मध्ये 2018 ते 2024 दरम्यान बांधकाम क्षेत्रात वाढ झाली आहे.`
-      };
-      return { answer: answers[lang] || answers.en, findingIds: targetIds };
-    }
-
-    if (q.includes("water") || q.includes("river") || q.includes("lake") || q.includes("पानी")) {
-      const answers: Record<LangCode, string> = {
-        en: `**[ML Results]** Water bodies in ${locName} remain stable (98.4% retention stability, F1=0.9349).\n\n**[EO Vision]** MNDWI spectral signatures show stable surface water boundaries with minimal seasonal shrinkage.`,
-        hi: `**[ML Results]** ${locName} में जल निकाय 2018 के आधारभूत स्तर की तुलना में स्थिर हैं।`,
-        mr: `**[ML Results]** ${locName} मधील जलसाठे स्थिर आहेत.`
-      };
-      return { answer: answers[lang] || answers.en, findingIds: targetIds };
-    }
-
     return {
-      answer: `**[ML Results]** In ${locName}, our ExtraTrees model (Macro F1: 0.6209) evaluated 24 multi-spectral bands between 2018 and 2024. Most changes are concentrated in built-up expansion (+8.2%) and peripheral vegetation dynamics (-5.8%).\n\n**[GPT-OSS Reasoning]** Let me know if you would like specific evidence on vegetation, built-up areas, or water bodies.`,
+      answer: `⚠️ [Network Disconnected] Could not reach GeoLens AI server. Please confirm backend server is running on http://localhost:5000.`,
       findingIds: targetIds.length > 0 ? targetIds : undefined
     };
+  },
+
+  /**
+   * Run a direct analysis on active dataset payload.
+   */
+  analyzeData: async (analysisResult: any, question?: string, context?: any): Promise<string> => {
+    try {
+      const res = await BackendAPI.reasonWithEvidence({
+        active_analysis: analysisResult,
+        question: question || "Provide a detailed AI analysis of this dataset.",
+        context: context || {}
+      });
+      if (res && res.status === "success" && res.analysis) {
+        return res.analysis;
+      }
+      return res?.answer || "Unable to generate AI analysis.";
+    } catch (err) {
+      return "Error: Unable to generate AI analysis.";
+    }
   }
 };

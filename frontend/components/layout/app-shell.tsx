@@ -84,7 +84,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           isSidebarCollapsed ? "justify-center px-2" : "justify-between px-5"
         )}>
           <div className="flex items-center gap-3 min-w-0">
-            <img src="/geolens-logo.svg" alt="GeoLens Logo" className="h-10 w-10 object-contain rounded-full border border-[#4C7A3D]/30 shadow-xs flex-shrink-0" />
+            <img src="/geolens-logo.png" alt="GeoLens Logo" className="h-10 w-10 object-contain rounded-full border border-[#4C7A3D]/30 shadow-xs flex-shrink-0" />
             {!isSidebarCollapsed && (
               <div className="min-w-0">
                 <h1 className={clsx("text-xl font-extrabold leading-none tracking-tight truncate", isLight ? "text-[#2D3B27]" : "text-[#F1F5F9]")}>GeoLens</h1>
@@ -151,7 +151,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                 {/* Centered GeoLens Logo (44px height) */}
                 <div className="mb-2.5 flex items-center justify-center">
                   <img
-                    src="/geolens-logo.svg"
+                    src="/geolens-logo.png"
                     alt="GeoLens Logo"
                     className="h-11 w-11 object-contain rounded-full border border-[#4C7A3D]/30 shadow-xs"
                   />
@@ -175,7 +175,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           <div className={clsx("relative flex flex-col w-72 max-w-xs border-r", isLight ? "bg-[#FFFFFF] border-[#E5E7DE]" : "bg-[#0B1120] border-[#1E293B]")}>
             <div className={clsx("flex items-center justify-between h-20 px-5 border-b", isLight ? "border-[#E5E7DE]" : "border-[#1E293B]")}>
               <div className="flex items-center gap-3">
-                <img src="/geolens-logo.svg" alt="GeoLens Logo" className="h-10 w-10 object-contain rounded-full border border-teal-500/30 shadow-xs" />
+                <img src="/geolens-logo.png" alt="GeoLens Logo" className="h-10 w-10 object-contain rounded-full border border-teal-500/30 shadow-xs" />
                 <span className={clsx("text-xl font-extrabold", isLight ? "text-[#2D3B27]" : "text-[#F1F5F9]")}>GeoLens</span>
               </div>
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 rounded-lg border border-[#E5E7DE] text-[#6B7568]">

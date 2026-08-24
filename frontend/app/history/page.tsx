@@ -78,7 +78,7 @@ export default function HistoryPage() {
   };
 
   const handleDelete = (id: string) => {
-    areasService.removeHistoryItem(id);
+    areasService.deleteHistoryItem(id);
     loadHistory();
   };
 

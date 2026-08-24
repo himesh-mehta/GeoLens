@@ -9,8 +9,8 @@ import { useTheme } from '@/lib/theme/theme-context';
 import { AIAvatar } from '@/components/ui/ai-avatar';
 
 export interface AIAssistantProps {
-  context: AIQuestionContext;
-  onSelectFindingById: (findingId: string) => void;
+  context?: AIQuestionContext;
+  onSelectFindingById?: (findingId: string) => void;
   onClose?: () => void;
   title?: string;
   placeholder?: string;
@@ -35,6 +35,8 @@ export function AIAssistant({
   const { theme } = useTheme();
   const isLight = theme === 'light';
 
+  const effectiveContext = context || { locationId: 'All Regions', areaName: 'All Regions' };
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -44,9 +46,9 @@ export function AIAssistant({
 
   const conversationHistoryRef = useRef<ConversationTurn[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const hasAnalysis = !!context.analysisResult;
+  const hasAnalysis = !!effectiveContext.analysisResult;
 
-  const displayTitle = title || "Ask AI Assistant";
+  const displayTitle = title || "Orbit — Earth Intelligence AI";
   const displayPlaceholder = placeholder || t('assistant.placeholder');
 
   const scrollToBottom = () => {
@@ -81,7 +83,7 @@ export function AIAssistant({
     try {
       const response = await aiService.askQuestion(
         userText,
-        context,
+        effectiveContext,
         lang,
         conversationHistoryRef.current
       );
@@ -181,12 +183,12 @@ export function AIAssistant({
           <AIAvatar size="sm" className="mt-0.5" />
           <div className="space-y-1.5 flex-1 min-w-0">
             <p className={`text-xs font-bold ${isLight ? 'text-[#2D3B27]' : 'text-[#F1F5F9]'}`}>
-              {context.areaName}
+              {effectiveContext.areaName || 'Selected Location'}
             </p>
             <p className={`text-xs leading-relaxed ${isLight ? 'text-[#3D4A37]' : 'text-[#CBD5E1]'}`}>
-              {context.analysisResult ? (
+              {effectiveContext.analysisResult ? (
                 <>
-                  I've analyzed this location — <strong className={isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}>{context.analysisResult.prediction || 'Agriculture'}</strong> is the dominant land cover at <strong>{((context.analysisResult.confidence || 0.88) * 100).toFixed(1)}%</strong> confidence. Want me to break down what this means?
+                  I've analyzed this location — <strong className={isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}>{effectiveContext.analysisResult.prediction || 'Agriculture'}</strong> is the dominant land cover at <strong>{((effectiveContext.analysisResult.confidence || 0.88) * 100).toFixed(1)}%</strong> confidence. Want me to break down what this means?
                 </>
               ) : lang === 'hi' ? (
                 'नमस्ते! मैं उपग्रह चित्रों से आपके क्षेत्र में हो रहे परिवर्तनों को समझने में आपकी सहायता कर सकता हूँ।'
@@ -251,7 +253,7 @@ export function AIAssistant({
                 {isAi && (
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <AIAvatar size="xs" />
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}`}>AI ASSISTANT</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-[#4C7A3D]' : 'text-[#14B8A6]'}`}>ORBIT AI ASSISTANT</span>
                   </div>
                 )}
                 <div>{isAi ? renderFormattedText(msg.text, isLight) : msg.text}</div>
@@ -260,7 +262,7 @@ export function AIAssistant({
                   <div className={`mt-2 pt-2 border-t ${isLight ? 'border-[#D8DCCF]' : 'border-[#334155]'}`}>
                     <button
                       type="button"
-                      onClick={() => onSelectFindingById(msg.findingIds![0])}
+                      onClick={() => onSelectFindingById?.(msg.findingIds![0])}
                       className={`px-2.5 py-1 border rounded text-[10px] font-semibold transition-colors cursor-pointer ${
                         isLight
                           ? 'bg-[#FFFFFF] hover:bg-[#4C7A3D] text-[#4C7A3D] hover:text-white border-[#4C7A3D]/40'

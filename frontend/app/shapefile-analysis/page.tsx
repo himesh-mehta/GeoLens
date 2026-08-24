@@ -6,12 +6,14 @@ import { BackendAPI } from '@/lib/api-client';
 import dynamic from 'next/dynamic';
 import { useTheme } from '@/lib/theme/theme-context';
 import { clsx } from 'clsx';
-import { v4 as uuidv4 } from 'uuid';
 
 // Dynamically import the map to avoid SSR issues with Leaflet
 const DynamicMap = dynamic(() => import('@/components/map/DynamicMap'), { ssr: false });
 
+import { useActiveAnalysis } from '@/lib/analysis-context';
+
 export default function ShapefileAnalysisPage() {
+  const { setActiveAnalysis } = useActiveAnalysis();
   const { theme } = useTheme();
   const isLight = theme === 'light';
 
@@ -27,6 +29,19 @@ export default function ShapefileAnalysisPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [results, setResults] = useState<any>(null);
+
+  useEffect(() => {
+    if (results) {
+      setActiveAnalysis({
+        page: 'shapefile-analysis',
+        filename: zipFile?.name,
+        summary: results.summary,
+        features: results.features,
+        transitionStats: results.transition_statistics,
+        overallChange: results.overall_change
+      });
+    }
+  }, [results]);
   
   const [sortConfig, setSortConfig] = useState<{key: string, direction: 'asc'|'desc'} | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -78,11 +93,12 @@ export default function ShapefileAnalysisPage() {
       interval = setInterval(async () => {
         try {
           const res = await BackendAPI.getShapefileStatus(jobId);
-          if (res.status === 'Error') {
+          const st = (res.status || '').toLowerCase();
+          if (st === 'error' || st === 'not found') {
             setStatus('error');
-            setStatusMessage(res.error || "Analysis failed");
+            setStatusMessage(res.error || "Job expired or failed. Please upload shapefile again.");
             clearInterval(interval);
-          } else if (res.status === 'Complete') {
+          } else if (st === 'complete') {
             setStatus('complete');
             setStatusMessage("Analysis complete. Loading results...");
             const finalRes = await BackendAPI.getShapefileResults(jobId);

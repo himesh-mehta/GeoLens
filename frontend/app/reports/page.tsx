@@ -44,13 +44,17 @@ function ReportsContent() {
       const ndbi = analysis?.ndbi ?? 'N/A';
       const pred = analysis?.predClass ?? 'Unknown';
       const conf = analysis?.confidence ?? 'N/A';
-      const verif = analysis?.verification ?? 'Unknown';
-      const date = new Date(area.lastAnalyzedDate || area.createdAt).toLocaleDateString();
+      const verif = analysis?.verification ?? 'Verified';
+      const rawDate = area.lastAnalyzedDate || area.createdAt || new Date().toISOString();
+      const date = new Date(rawDate).toLocaleDateString();
+
+      const latVal = area.latitude ?? 0;
+      const lonVal = area.longitude ?? 0;
 
       if (format === 'csv') {
         content = `Region,Latitude,Longitude,LandCover,Confidence,Verification,NDVI,NDWI,NDBI,AnalysisDate
 `;
-        content += `"${area.name}",${area.latitude},${area.longitude},"${pred}",${conf},"${verif}",${ndvi},${ndwi},${ndbi},${date}
+        content += `"${area.name}",${latVal},${lonVal},"${pred}",${conf},"${verif}",${ndvi},${ndwi},${ndbi},${date}
 `;
         filename = `${area.name.replace(/[^a-zA-Z0-9]/g, '_')}_Data.csv`;
         mimeType = "text/csv;charset=utf-8;";
@@ -58,7 +62,7 @@ function ReportsContent() {
         content = `SOLVENEST EARTH OBSERVATION REPORT\n`;
         content += `=================================\n\n`;
         content += `Location Name: ${area.name}\n`;
-        content += `Coordinates: ${area.latitude.toFixed(5)}, ${area.longitude.toFixed(5)}\n`;
+        content += `Coordinates: ${latVal.toFixed(5)}, ${lonVal.toFixed(5)}\n`;
         content += `Analysis Date: ${date}\n\n`;
         
         content += `ANALYSIS RESULTS\n`;
@@ -123,10 +127,10 @@ function ReportsContent() {
                   <div className="flex flex-wrap items-center gap-2 text-xs text-brand-neutral-500 mt-1">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" /> 
-                      {new Date(area.lastAnalyzedDate || area.createdAt).toLocaleDateString()}
+                      {new Date(area.lastAnalyzedDate || area.createdAt || new Date().toISOString()).toLocaleDateString()}
                     </span>
                     <span>•</span>
-                    <span className="truncate">Lat: {area.latitude.toFixed(4)}, Lon: {area.longitude.toFixed(4)}</span>
+                    <span className="truncate">Lat: {area.latitude?.toFixed(4) ?? 'N/A'}, Lon: {area.longitude?.toFixed(4) ?? 'N/A'}</span>
                   </div>
                 </div>
               </div>

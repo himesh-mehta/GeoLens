@@ -78,7 +78,10 @@ const CLASS_COLORS_DARK: Record<string, string> = {
   'Barren': '#b45309',
 };
 
+import { useActiveAnalysis } from '@/lib/analysis-context';
+
 export default function ExplorerPage() {
+  const { setActiveAnalysis } = useActiveAnalysis();
   const router = useRouter();
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -446,6 +449,12 @@ export default function ExplorerPage() {
         }
       : null,
   };
+
+  useEffect(() => {
+    if (pointResult || polygonResult) {
+      setActiveAnalysis(aiContext);
+    }
+  }, [pointResult, polygonResult]);
 
   const handleParams = useCallback((lat: string | null, lon: string | null, name: string | null, auto: string | null) => {
     if (lat && lon) {
@@ -1241,47 +1250,7 @@ export default function ExplorerPage() {
         </div>
       )}
 
-      {/* ── FLOATING BOT CIRCLE TRIGGER BUTTON (Shifted up & left, 72px diameter, cute agri-space avatar) ── */}
-      <button
-        onClick={() => setAssistantOpen(prev => !prev)}
-        title={assistantOpen ? "Close AI Assistant" : "Ask AI Assistant"}
-        className={`fixed bottom-8 right-8 z-[600] w-18 h-18 sm:w-20 sm:h-20 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 border-2 overflow-hidden shadow-2xl ${
-          pointResult || polygonResult ? 'animate-bounce' : 'hover:scale-105 active:scale-95'
-        } ${
-          isLight
-            ? 'bg-[#FFFFFF] border-[#4C7A3D]'
-            : 'bg-[#131B2E] border-[#14B8A6]'
-        }`}
-        style={{ boxShadow: '0 6px 20px rgba(0,0,0,0.3)' }}
-      >
-        {assistantOpen ? (
-          <X className="h-7 w-7 text-slate-700" />
-        ) : (
-          <div className="relative w-full h-full p-0.5 flex items-center justify-center">
-            <AIAvatar size="xl" className="w-full h-full" />
-            <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-400 border-2 border-white rounded-full animate-ping" />
-            <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-400 border-2 border-white rounded-full shadow-xs" />
-          </div>
-        )}
-      </button>
 
-      {/* ── FLOATING SLIDE-IN CHAT WIDGET OVERLAY (380-400px width, slides from right) ── */}
-      <div
-        className={`fixed top-20 right-6 z-[650] w-[380px] sm:w-[400px] max-w-[calc(100vw-32px)] h-[calc(100vh-104px)] rounded-2xl shadow-2xl border overflow-hidden flex flex-col transition-all duration-300 ease-out ${
-          assistantOpen
-            ? 'translate-x-0 opacity-100 pointer-events-auto'
-            : 'translate-x-[115%] opacity-0 pointer-events-none'
-        } ${
-          isLight ? 'bg-white border-[#E5E7DE]' : 'bg-[#131B2E] border-[#1E293B]'
-        }`}
-        style={{ boxShadow: isLight ? '0 12px 36px rgba(0,0,0,0.18)' : '0 12px 36px rgba(0,0,0,0.55)' }}
-      >
-        <AIAssistant
-          context={aiContext}
-          onSelectFindingById={() => {}}
-          onClose={() => setAssistantOpen(false)}
-        />
-      </div>
 
       {/* ── SHORTCUTS MODAL ── */}
       <KeyboardShortcutsModal

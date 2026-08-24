@@ -42,7 +42,10 @@ function getVal(r: any, key: string): number | null {
   return null;
 }
 
+import { useActiveAnalysis } from '@/lib/analysis-context';
+
 function ComparePageContent() {
+  const { setActiveAnalysis } = useActiveAnalysis();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -124,6 +127,12 @@ function ComparePageContent() {
   useEffect(() => {
     if (p1Data && p2Data) {
       setShowCompare(true);
+      setActiveAnalysis({
+        page: 'compare',
+        location: locationName,
+        period1: { start: p1Start, end: p1End, data: p1Data },
+        period2: { start: p2Start, end: p2End, data: p2Data }
+      });
     }
   }, [p1Data, p2Data]);
 

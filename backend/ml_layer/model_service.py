@@ -178,7 +178,13 @@ class ModelService:
 
     def _filter_region(self, df: pd.DataFrame, region_name: Optional[str]) -> pd.DataFrame:
         if region_name and region_name.lower() not in ("all", "all regions", ""):
-            return df[df["region"].str.lower() == region_name.lower()]
+            filtered = df[df["region"].str.lower() == region_name.lower()]
+            if len(filtered) > 0:
+                return filtered
+            for reg in df["region"].unique():
+                if reg.lower() in region_name.lower() or region_name.lower() in reg.lower():
+                    return df[df["region"].str.lower() == reg.lower()]
+            return pd.DataFrame()
         return df
 
     # =========================================================================

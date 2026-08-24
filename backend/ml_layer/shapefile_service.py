@@ -452,7 +452,7 @@ class ShapefileService:
         
     def get_status(self, job_id: str) -> Dict[str, Any]:
         if job_id not in self.jobs:
-            return {"status": "Not Found"}
+            return {"status": "Error", "error": "Job expired or not found. Please upload shapefile again."}
         return {
             "status": self.jobs[job_id]["status"],
             "error": self.jobs[job_id].get("error")
@@ -460,5 +460,5 @@ class ShapefileService:
         
     def get_results(self, job_id: str) -> Dict[str, Any]:
         if job_id not in self.jobs:
-            return {"status": "Not Found"}
+            return {"status": "Error", "error": "Job expired or not found."}
         return self.jobs[job_id].get("results", {})

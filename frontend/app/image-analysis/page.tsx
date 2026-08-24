@@ -90,7 +90,10 @@ function detectBandCode(filename: string, serverBand?: string): string {
   return 'UNKNOWN';
 }
 
+import { useActiveAnalysis } from '@/lib/analysis-context';
+
 export default function ImageAnalysisPage() {
+  const { setActiveAnalysis } = useActiveAnalysis();
   const router = useRouter();
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -111,6 +114,20 @@ export default function ImageAnalysisPage() {
   
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (result) {
+      setActiveAnalysis({
+        page: 'image-analysis',
+        filename: selectedFiles[0]?.name,
+        analysis_result: result,
+        predictedClass: result.predicted_class,
+        confidence: result.confidence_score,
+        spectralIndices: result.spectral_indices,
+        spectralStats: result.spectral_stats
+      });
+    }
+  }, [result]);
 
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);

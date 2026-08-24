@@ -12,8 +12,14 @@ export interface SavedArea {
   id: string;           // matches eoService locationId ("nashik", "pune", etc.)
   name: string;
   state?: string;       // e.g. "Maharashtra"
+  latitude?: number;
+  longitude?: number;
+  coordinates?: string;
   lastChecked?: string; // human-readable date label, e.g. "May 2025"
   recentFinding?: string; // e.g. "Vegetation decreased"
+  latestAnalysis?: any;
+  lastAnalyzedDate?: string;
+  createdAt?: string;
 }
 
 export interface HistoryItem {

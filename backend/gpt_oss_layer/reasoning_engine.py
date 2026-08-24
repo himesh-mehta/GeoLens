@@ -347,27 +347,16 @@ class GPTOssReasoningEngine:
         )
 
         # Route to intent handlers
-        if "which region" in q_lower or "most urban expansion" in q_lower or "most change" in q_lower:
-            response_text = self._handle_comparative_regions_query(region_stats)
-        elif any(w in q_lower for w in ["barren", "soil", "rock", "bare"]):
-            response_text = self._handle_barren_query(point_data, region_name, region_stats)
-        elif any(w in q_lower for w in ["vegetation", "canopy", "forest", "greenery", "trees", "deforestation"]):
-            response_text = self._handle_class_query("Vegetation", region_name, region_stats, "🌿")
-        elif any(w in q_lower for w in ["built-up", "urban", "construction", "expansion", "city"]):
-            response_text = self._handle_class_query("Built-up", region_name, region_stats, "🏗️")
-        elif any(w in q_lower for w in ["agriculture", "crop", "crops", "farm", "farmland"]):
-            response_text = self._handle_class_query("Agriculture", region_name, region_stats, "🌾")
-        elif any(w in q_lower for w in ["water", "river", "lake", "reservoir"]):
-            response_text = self._handle_class_query("Water", region_name, region_stats, "💧")
-        elif any(w in q_lower for w in ["agree", "agreement", "consistent", "verification"]):
-            response_text = self._handle_agreement_query(point_data, agreement_data)
-        elif any(w in q_lower for w in ["satellite", "image", "fcc", "rgb", "ndvi"]):
-            response_text = self._handle_image_query(point_data)
-        else:
-            response_text = self._handle_overview_query(region_name, region_stats, q_lower)
-
+        # Free-form queries: forward to generate_ai_analysis for live Groq LLM synthesis
+        from .ai_service import generate_ai_analysis
+        analysis_context = {
+            "region": region_name,
+            "region_stats": region_stats,
+            "point_data": point_data
+        }
+        response_text = generate_ai_analysis(analysis_context, question)
         return {"question": question, "region": region_name,
-                "answer": response_text, "context_used": context_str}
+                "answer": response_text, "context_used": ["Live Groq LLM Synthesis", "Spatial context"]}
 
     # ── Intent Handlers (uses real data only) ──────────────────────────────
 

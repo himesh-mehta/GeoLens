@@ -26,8 +26,8 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({ size = 'md', className }) =>
       )}
     >
       <img
-        src="/agri-space-bot.png"
-        alt="AI Assistant Avatar"
+        src="/agri-space-bot.png?v=3"
+        alt="Orbit AI Assistant Avatar"
         className="w-full h-full object-cover"
       />
     </div>

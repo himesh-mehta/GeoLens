@@ -39,11 +39,19 @@ export default function MyAreasPage() {
   }, []);
 
   const handleOpen = (area: SavedArea) => {
-    router.push(`/explorer?lat=${area.latitude}&lon=${area.longitude}&name=${encodeURIComponent(area.name)}`);
+    if (area.latitude !== undefined && area.longitude !== undefined) {
+      router.push(`/explorer?lat=${area.latitude}&lon=${area.longitude}&name=${encodeURIComponent(area.name)}`);
+    } else {
+      router.push(`/explorer?area=${area.id}`);
+    }
   };
 
   const handleAnalyzeAgain = (area: SavedArea) => {
-    router.push(`/explorer?lat=${area.latitude}&lon=${area.longitude}&name=${encodeURIComponent(area.name)}&auto_analyze=true`);
+    if (area.latitude !== undefined && area.longitude !== undefined) {
+      router.push(`/explorer?lat=${area.latitude}&lon=${area.longitude}&name=${encodeURIComponent(area.name)}&auto_analyze=true`);
+    } else {
+      router.push(`/explorer?area=${area.id}&auto_analyze=true`);
+    }
   };
 
   const handleViewReport = (area: SavedArea) => {

@@ -85,11 +85,13 @@ export const BackendAPI = {
 
   reasonWithEvidence: (payload: {
     question: string;
-    region: string;
+    region?: string;
     point_id?: number;
     ml_evidence?: any;
     eo_evidence?: any;
     transition_statistics?: any;
+    context?: any;
+    active_analysis?: any;
   }) =>
     fetchFromBackend('/api/reason', {
       method: 'POST',

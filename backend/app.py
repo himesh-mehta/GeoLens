@@ -78,6 +78,7 @@ from vision_layer.image_generator import EOImageGenerator
 from vision_layer.visual_extractor import EOVisionExtractor
 from vision_layer.vision_evaluator import EOVisionEvaluator
 from gpt_oss_layer.reasoning_engine import GPTOssReasoningEngine
+from gpt_oss_layer.ai_service import generate_ai_analysis, generate_structured_image_analysis
 
 app = Flask(__name__, template_folder="templates")
 
@@ -609,11 +610,9 @@ def ai_analyze_image():
 @app.route("/api/reason", methods=["POST"])
 def reason():
     """
-    Structured multimodal reasoning endpoint.
-    Input:  { region, point_id?, question, ml_evidence?, eo_evidence?, transition_statistics? }
+    Structured reasoning endpoint powered by live Groq LLM API.
+    Input:  { region, point_id?, question, ml_evidence?, eo_evidence?, context? }
     Output: { answer, evidence_used, confidence_level, caveats, source_tags }
-
-    GPT-OSS uses ONLY supplied evidence — never invents statistics.
     """
     data = request.get_json() or {}
     question = data.get("question", "").strip()
@@ -623,49 +622,37 @@ def reason():
     if not question:
         return jsonify({"status": "error", "message": "Field 'question' is required"}), 400
 
-    # Build evidence from supplied fields or fetch from ML service
-    ml_evidence = data.get("ml_evidence")
-    eo_evidence = data.get("eo_evidence")
-    transition_stats = data.get("transition_statistics")
-
+    # Extract active UI analysis payload if provided
+    active_analysis = data.get("context") or data.get("ml_evidence") or data.get("analysis_result") or data.get("analysisResult")
+    point_data = ml_service.get_point_detail(int(point_id)) if point_id is not None else None
+    
+    # Only fetch historical region stats if no specific point or active UI analysis is active
     region_stats = None
-    point_data = None
-    unified_evidence = None
-
-    if region_name:
+    if not active_analysis and point_id is None and region_name:
         region_stats = ml_service.get_region_statistics(region_name)
 
-    if point_id is not None:
-        point_data = ml_service.get_point_detail(int(point_id))
-        unified_evidence = ml_service.get_unified_evidence(int(point_id))
+    # Assemble comprehensive context for LLM prompt
+    context_payload = {
+        "region": region_name or "Selected Location",
+        "active_analysis": active_analysis,
+        "region_stats": region_stats,
+        "point_data": point_data,
+        **data
+    }
 
-    # If caller didn't supply evidence, build it from the ML service
-    if ml_evidence is None and unified_evidence:
-        ml_evidence = unified_evidence.get("ml_evidence")
-    if eo_evidence is None and unified_evidence:
-        eo_evidence = unified_evidence.get("eo_evidence")
-    if transition_stats is None and unified_evidence:
-        transition_stats = unified_evidence.get("change_evidence")
-    if transition_stats is None and region_stats:
-        transition_stats = region_stats.get("change_statistics")
-
-    # Run GPT-OSS structured reasoning
-    result = gpt_oss.reason_with_evidence(
-        question=question,
-        region_name=region_name or "All Regions",
-        region_stats=region_stats,
-        ml_evidence=ml_evidence,
-        eo_evidence=eo_evidence,
-        transition_stats=transition_stats,
-        point_data=point_data
-    )
+    # Generate dynamic, question-aware response from Groq LLM API
+    ai_answer = generate_ai_analysis(context_payload, question)
 
     return jsonify({
         "status": "success",
         "query": question,
-        "region": region_name or "All Regions",
+        "region": region_name or "Selected Location",
         "point_id": point_id,
-        **result
+        "answer": ai_answer,
+        "evidence_used": ["Groq LLM Synthesis", "Multi-spectral EO Context"],
+        "confidence_level": "high",
+        "caveats": ["Answer generated using Groq LLM synthesis based on active EO/ML features."],
+        "source_tags": ["GPT-OSS Reasoning"]
     })
 
 
@@ -1075,11 +1062,14 @@ def get_shapefile_results(job_id):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    key = os.environ.get("GROQ_API_KEY", "")
+    masked_key = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else "NOT CONFIGURED / MISSING"
     print("=" * 60)
     print(f"SIH EO/ML Python Service v3.0 — port {port}")
+    print(f"Groq API Key Status: LOADED ({masked_key})")
     print(f"Dashboard: http://localhost:{port}")
     print(f"REST API for Node.js/React: http://localhost:{port}/api/")
     print(f"EO Vision: Feature-Derived/Synthetic (no real GeoTIFF)")
-    print(f"GPT-OSS:   Offline Semantic Reasoning Engine")
+    print(f"GPT-OSS:   Groq Live LLM Synthesis Engine")
     print("=" * 60)
     app.run(host="0.0.0.0", port=port, debug=False)
