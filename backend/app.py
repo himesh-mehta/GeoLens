@@ -83,17 +83,36 @@ from gpt_oss_layer.ai_service import generate_ai_analysis, generate_structured_i
 app = Flask(__name__, template_folder="templates")
 
 
-# ── CORS for Node.js / React integration ─────────────────────────────────────
+# ── CORS for Node.js / React / Vercel integration ─────────────────────────────
 @app.after_request
 def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"]  = "*"
+    origin = request.headers.get("Origin")
+    allowed = os.environ.get("ALLOWED_ORIGIN")
+    if allowed:
+        allowed_list = [o.strip() for o in allowed.split(",") if o.strip()]
+        if origin and (origin in allowed_list or "*" in allowed_list):
+            response.headers["Access-Control-Allow-Origin"] = origin
+        elif allowed_list:
+            response.headers["Access-Control-Allow-Origin"] = allowed_list[0]
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     return response
 
 @app.route("/api/<path:path>", methods=["OPTIONS"])
 def handle_options(path):
     return jsonify({"status": "ok"})
+
+@app.route("/health", methods=["GET"])
+@app.route("/api/health", methods=["GET"])
+def health_check():
+    return jsonify({
+        "status": "ok",
+        "service": "geolens-backend"
+    }), 200
 
 
 # ── Service Initialization ────────────────────────────────────────────────────

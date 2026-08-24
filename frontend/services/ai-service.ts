@@ -119,7 +119,7 @@ export const aiService = {
     // Network disconnected fallback
     await delay(300);
     return {
-      answer: `⚠️ [Network Disconnected] Could not reach GeoLens AI server. Please confirm backend server is running on http://localhost:5000.`,
+      answer: `⚠️ [Network Disconnected] Could not reach GeoLens AI server (${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}). Please confirm backend server is online.`,
       findingIds: targetIds.length > 0 ? targetIds : undefined
     };
   },
