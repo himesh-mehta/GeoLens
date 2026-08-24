@@ -183,7 +183,7 @@ export const BackendAPI = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ band_means: bandMeans }),
-      signal: AbortSignal.timeout(30000)  // 30s plenty — only math, no file I/O
+      signal: AbortSignal.timeout(60000)  // 60s — backend is instant but Render cold-start takes up to 50s
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

@@ -15,19 +15,23 @@ import { fromArrayBuffer } from 'geotiff';
  * Returns e.g. "B02", "B08", "B11", or null if unrecognized.
  */
 export function detectBandFromFilename(filename: string): string | null {
-  const u = filename.toUpperCase();
+  // Normalize: strip Windows duplicate suffixes like " (1)", " (2)" etc. before matching
+  // e.g. "sentinel_B04 (1).tif" → "sentinel_B04.tif"
+  const normalized = filename.replace(/\s*\(\d+\)(\.\w+)$/, '$1');
+  const u = normalized.toUpperCase();
+
   if (/B8A/.test(u)) return 'B8A';
-  if (/[_\-\.]B02[_\-\.]|B02\./.test(u) || /\bB02\b/.test(u)) return 'B02';
-  if (/[_\-\.]B03[_\-\.]|B03\./.test(u) || /\bB03\b/.test(u)) return 'B03';
-  if (/[_\-\.]B04[_\-\.]|B04\./.test(u) || /\bB04\b/.test(u)) return 'B04';
-  if (/[_\-\.]B08[_\-\.]|B08\./.test(u) || /\bB08\b/.test(u)) return 'B08';
-  if (/[_\-\.]B11[_\-\.]|B11\./.test(u) || /\bB11\b/.test(u)) return 'B11';
-  if (/[_\-\.]B12[_\-\.]|B12\./.test(u) || /\bB12\b/.test(u)) return 'B12';
-  if (/[_\-\.]B01[_\-\.]|B01\./.test(u) || /\bB01\b/.test(u)) return 'B01';
-  if (/[_\-\.]B05[_\-\.]|B05\./.test(u) || /\bB05\b/.test(u)) return 'B05';
-  if (/[_\-\.]B06[_\-\.]|B06\./.test(u) || /\bB06\b/.test(u)) return 'B06';
-  if (/[_\-\.]B07[_\-\.]|B07\./.test(u) || /\bB07\b/.test(u)) return 'B07';
-  if (/[_\-\.]B09[_\-\.]|B09\./.test(u) || /\bB09\b/.test(u)) return 'B09';
+  if (/[_\-\.]B02[_\-\.]|_B02\.|B02\.|\bB02\b/.test(u)) return 'B02';
+  if (/[_\-\.]B03[_\-\.]|_B03\.|B03\.|\bB03\b/.test(u)) return 'B03';
+  if (/[_\-\.]B04[_\-\.]|_B04\.|B04\.|\bB04\b/.test(u)) return 'B04';
+  if (/[_\-\.]B08[_\-\.]|_B08\.|B08\.|\bB08\b/.test(u)) return 'B08';
+  if (/[_\-\.]B11[_\-\.]|_B11\.|B11\.|\bB11\b/.test(u)) return 'B11';
+  if (/[_\-\.]B12[_\-\.]|_B12\.|B12\.|\bB12\b/.test(u)) return 'B12';
+  if (/[_\-\.]B01[_\-\.]|_B01\.|B01\.|\bB01\b/.test(u)) return 'B01';
+  if (/[_\-\.]B05[_\-\.]|_B05\.|B05\.|\bB05\b/.test(u)) return 'B05';
+  if (/[_\-\.]B06[_\-\.]|_B06\.|B06\.|\bB06\b/.test(u)) return 'B06';
+  if (/[_\-\.]B07[_\-\.]|_B07\.|B07\.|\bB07\b/.test(u)) return 'B07';
+  if (/[_\-\.]B09[_\-\.]|_B09\.|B09\.|\bB09\b/.test(u)) return 'B09';
   if (/NIR/.test(u)) return 'B08';
   if (/SWIR1|SWIR-1/.test(u)) return 'B11';
   if (/SWIR2|SWIR-2/.test(u)) return 'B12';
