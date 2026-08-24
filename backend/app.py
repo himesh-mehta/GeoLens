@@ -498,26 +498,48 @@ def analyze_image():
 
 @app.route("/api/inspect-bands", methods=["POST"])
 def inspect_bands():
-    """Inspects uploaded GeoTIFF files for embedded metadata and returns band identifications."""
+    """Inspects uploaded GeoTIFF files for embedded metadata and returns band identifications.
+    Memory-safe: detects bands from filenames first; only reads first 64KB of TIFF header
+    as a last resort, never loads full raster arrays.
+    """
+    import gc
     try:
         uploaded_files = request.files.getlist("files") or request.files.getlist("file")
         if not uploaded_files:
             return jsonify({"status": "error", "message": "No files provided"}), 400
-            
+
         results = []
         for f in uploaded_files:
-            filename = f.filename
-            file_bytes = f.read()
-            detected_band, metadata = vision_ext.inspect_single_geotiff(filename, file_bytes)
+            filename = f.filename or ""
+
+            # Step 1: try filename-only detection (zero memory cost)
+            band_code, meta = vision_ext.inspect_single_geotiff(filename, None)
+
+            # Step 2: only if filename detection failed, read a tiny header (max 64 KB)
+            if band_code == "UNKNOWN":
+                try:
+                    header_bytes = f.read(65536)  # max 64 KB — enough for TIFF IFD and tags
+                    band_code, meta = vision_ext.inspect_single_geotiff(filename, header_bytes)
+                except Exception:
+                    pass  # keep UNKNOWN, don't crash
+                finally:
+                    gc.collect()
+            else:
+                # Skip reading the file entirely — just drain it so Flask doesn't warn
+                f.stream.seek(0, 2)  # seek to end without reading
+
             results.append({
                 "filename": filename,
-                "detected_band": detected_band,
-                "metadata": metadata
+                "detected_band": band_code,
+                "metadata": meta
             })
-            
+
         return jsonify({"status": "success", "bands": results})
     except Exception as e:
+        logger.error(f"[INSPECT] Exception: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        gc.collect()
 
 
 @app.route("/api/eo", methods=["POST"])

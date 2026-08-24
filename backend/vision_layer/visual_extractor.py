@@ -523,18 +523,20 @@ class EOVisionExtractor:
         except Exception as e:
             return {"success": False, "error": f"Failed to process image: {str(e)}"}
 
-    def inspect_single_geotiff(self, filename: str, file_bytes: bytes) -> Tuple[str, Dict[str, Any]]:
+    def inspect_single_geotiff(self, filename: str, file_bytes) -> Tuple[str, Dict[str, Any]]:
         """
         Inspects embedded GeoTIFF metadata / filename pattern to detect Sentinel-2 band.
         Order of preference:
         1. Filename pattern matching (B01..B12, B8A, B1..B12, alias names like RED, GREEN, BLUE, NIR, SWIR)
         2. GeoTIFF metadata / tags inspection using rasterio (wavelength, descriptions, colorinterp)
+           - Only attempted if file_bytes is provided (not None).
+           - To avoid OOM on large TIFFs, callers should pass only the first 64 KB header bytes.
         3. If both fail -> "UNKNOWN"
         """
         import re
         upper_name = filename.upper()
 
-        # 1. Filename Pattern Matching
+        # 1. Filename Pattern Matching (zero memory cost)
         patterns = [
             (r'[\._\-]B8A[\._\-]', "B8A"),
             (r'[\._\-]B0?1[\._\-]', "B01"),
@@ -575,7 +577,10 @@ class EOVisionExtractor:
         if "NIR" in upper_name: return "B08", {"detection_source": "filename_alias"}
         if "REDEDGE" in upper_name or "RED_EDGE" in upper_name: return "B05", {"detection_source": "filename_alias"}
 
-        # 2. Embedded GeoTIFF Metadata Inspection via rasterio
+        # 2. Embedded GeoTIFF Metadata Inspection via rasterio (only if bytes provided)
+        if file_bytes is None:
+            return "UNKNOWN", {"detection_source": "filename_only_no_bytes"}
+
         try:
             import rasterio
             from rasterio.io import MemoryFile
