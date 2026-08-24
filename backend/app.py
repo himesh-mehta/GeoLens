@@ -127,16 +127,38 @@ def home_dashboard():
 @app.route("/api/health", methods=["GET"])
 def health_check():
     model_name = "Unknown"
-    if ml_service.model_bundle:
+    total_regions = 0
+    if hasattr(ml_service, "model_bundle") and ml_service.model_bundle:
         model_name = ml_service.model_bundle.get("model_name", "Unknown")
+    if hasattr(ml_service, "get_regions"):
+        try:
+            total_regions = len(ml_service.get_regions())
+        except Exception:
+            total_regions = 0
+
+    gee_initialized = False
+    gee_status = "Not Initialized"
+    try:
+        from data_sources.gee_source import GEE_INITIALIZED, GEE_AUTH_STATUS
+        gee_initialized = GEE_INITIALIZED
+        gee_status = GEE_AUTH_STATUS
+    except Exception:
+        pass
+
+    gpt_oss_loaded = True
+    if hasattr(gpt_oss, "is_loaded") and callable(getattr(gpt_oss, "is_loaded")):
+        gpt_oss_loaded = gpt_oss.is_loaded()
+
     return jsonify({
         "status": "online",
         "service": "SIH EO/ML Python Service",
         "version": "3.0.0",
         "active_model": model_name,
-        "total_regions": len(ml_service.get_regions()),
+        "total_regions": total_regions,
+        "gee_initialized": gee_initialized,
+        "gee_status": gee_status,
         "eo_vision": "Feature-Derived/Synthetic (no real GeoTIFF)",
-        "gpt_oss_loaded": gpt_oss.is_loaded(),
+        "gpt_oss_loaded": gpt_oss_loaded,
         "gpt_oss": "Groq Live / Offline Semantic Reasoning Engine"
     }), 200
 
