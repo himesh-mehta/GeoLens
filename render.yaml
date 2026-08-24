@@ -12,4 +12,6 @@ services:
       - key: ALLOWED_ORIGIN
         sync: false
       - key: GEE_PROJECT_ID
-        value: solvenest-earth-engine
+        sync: false
+      - key: GEE_SERVICE_ACCOUNT_JSON
+        sync: false

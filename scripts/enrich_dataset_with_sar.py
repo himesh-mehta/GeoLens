@@ -6,7 +6,8 @@ import time
 
 # Initialize Earth Engine
 try:
-    ee.Initialize(project="solvenest-earth-engine")
+    project_id = os.environ.get("GEE_PROJECT_ID", "")
+    ee.Initialize(project=project_id)
     print("Earth Engine initialized successfully.")
 except Exception as e:
     print(f"Earth Engine initialization failed: {e}")

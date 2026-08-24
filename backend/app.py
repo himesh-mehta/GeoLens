@@ -106,14 +106,6 @@ def add_cors_headers(response):
 def handle_options(path):
     return jsonify({"status": "ok"})
 
-@app.route("/health", methods=["GET"])
-@app.route("/api/health", methods=["GET"])
-def health_check():
-    return jsonify({
-        "status": "ok",
-        "service": "geolens-backend"
-    }), 200
-
 
 # ── Service Initialization ────────────────────────────────────────────────────
 ml_service     = ModelService()
@@ -132,6 +124,7 @@ def home_dashboard():
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
+@app.route("/api/health", methods=["GET"])
 def health_check():
     model_name = "Unknown"
     if ml_service.model_bundle:
@@ -143,56 +136,38 @@ def health_check():
         "active_model": model_name,
         "total_regions": len(ml_service.get_regions()),
         "eo_vision": "Feature-Derived/Synthetic (no real GeoTIFF)",
-        "gpt_oss": "Offline Semantic Reasoning Engine",
-        "endpoints": [
-            "GET  /health",
-            "GET  /api/regions",
-            "GET  /api/regions/<region>",
-            "GET  /api/summary/<region>",
-            "GET  /api/statistics/<region>",
-            "GET  /api/landcover/<region>",
-            "GET  /api/points/<region>",
-            "GET  /api/change/<region>",
-            "GET  /api/transitions/<region>",
-            "GET  /api/explainability/<region>",
-            "GET  /api/feature-importance",
-            "GET  /api/geojson/<region>",
-            "GET  /api/models",
-            "GET  /api/models/comparison",
-            "GET  /api/spatial-validation",
-            "GET  /api/data-quality",
-            "GET  /api/point/<id>",
-            "GET  /api/eo/<point_id>",
-            "GET  /api/evidence/<point_id>",
-            "GET  /api/report/<region>",
-            "GET  /api/export/<region>/<format>",
-            "POST /api/reason",
-            "POST /api/ask",
-            "POST /api/predict",
-            "POST /api/analyze-image",
-            "POST /api/query-nl",
-            "POST /api/feedback",
-        ]
-    })
+        "gpt_oss_loaded": gpt_oss.is_loaded(),
+        "gpt_oss": "Groq Live / Offline Semantic Reasoning Engine"
+    }), 200
 
 
 @app.route("/api/health/gee", methods=["GET"])
 def health_check_gee():
-    from data_sources.gee_source import GEE_AVAILABLE, GEE_AUTH_STATUS
+    from data_sources.gee_source import (
+        GEE_AVAILABLE, GEE_AUTH_STATUS, GEE_AUTH_MODE, GEE_ACTIVE_PROJECT, GEE_SERVICE_ACCOUNT_EMAIL
+    )
+    project_id = GEE_ACTIVE_PROJECT or os.environ.get("GEE_PROJECT_ID", "")
     if GEE_AVAILABLE:
-        return jsonify({
+        resp = {
             "available": True,
             "authenticated": True,
-            "project": os.environ.get("GEE_PROJECT_ID", "solvenest-earth-engine"),
+            "project": project_id,
+            "mode": GEE_AUTH_MODE,
             "service": "Google Earth Engine",
             "status": "success"
-        })
+        }
+        if GEE_SERVICE_ACCOUNT_EMAIL:
+            resp["service_account"] = GEE_SERVICE_ACCOUNT_EMAIL
+        return jsonify(resp)
     else:
         return jsonify({
             "available": False,
             "authenticated": False,
+            "project": project_id,
+            "mode": GEE_AUTH_MODE,
             "error_code": "GEE_AUTH_ERROR",
             "message": f"GEE unavailable: {GEE_AUTH_STATUS}",
+            "service": "Google Earth Engine",
             "status": "error"
         }), 503
 

@@ -36,7 +36,7 @@ The backend relies heavily on Google Earth Engine (GEE). You must authenticate y
    earthengine authenticate
    ```
 3. A browser window will open. Follow the prompts to authenticate using your Google Account that has Earth Engine access enabled.
-4. Set the `GEE_PROJECT_ID` in your `.env` file to your specific Earth Engine enabled Google Cloud Project (e.g., `solvenest-earth-engine`).
+4. Set the `GEE_PROJECT_ID` in your `.env` file to your specific Earth Engine enabled Google Cloud Project ID.
 
 ## 4. Machine Learning Model Artifacts
 

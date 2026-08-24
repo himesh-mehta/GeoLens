@@ -103,7 +103,7 @@ cp .env.example .env
 Ensure your `.env` contains:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-GEE_PROJECT_ID=solvenest-earth-engine
+GEE_PROJECT_ID=your_gee_project_id_here
 PORT=5000
 ```
 

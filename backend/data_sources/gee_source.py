@@ -13,21 +13,106 @@ class GEEError(Exception):
 
 GEE_AVAILABLE = False
 GEE_AUTH_STATUS = "Not Initialized"
+GEE_AUTH_MODE = "None"
+GEE_ACTIVE_PROJECT = ""
+GEE_SERVICE_ACCOUNT_EMAIL = ""
 
 try:
     import ee
-    try:
-        project_id = os.environ.get("GEE_PROJECT_ID", "solvenest-earth-engine")
-        ee.Initialize(project=project_id, opt_url='https://earthengine-highvolume.googleapis.com')
-        GEE_AVAILABLE = True
-        GEE_AUTH_STATUS = "Authenticated"
-        logger.info(f"Google Earth Engine initialized successfully with project {project_id}.")
-    except Exception as e:
-        GEE_AUTH_STATUS = str(e)
-        logger.warning(f"GEE Initialization failed: {e}")
 except ImportError:
-    GEE_AUTH_STATUS = "earthengine-api missing"
-    logger.warning("earthengine-api not installed. GEE unavailable.")
+    ee = None
+
+def _mask_email(email: str) -> str:
+    """Mask email address for secure logging (e.g. geo***@project.iam.gserviceaccount.com)."""
+    if not email or "@" not in email:
+        return "***"
+    parts = email.split("@", 1)
+    user, domain = parts[0], parts[1]
+    if len(user) <= 3:
+        masked_user = user[0] + "***"
+    else:
+        masked_user = user[:3] + "***"
+    return f"{masked_user}@{domain}"
+
+def _init_earth_engine():
+    global GEE_AVAILABLE, GEE_AUTH_STATUS, GEE_AUTH_MODE, GEE_ACTIVE_PROJECT, GEE_SERVICE_ACCOUNT_EMAIL
+    
+    if ee is None:
+        GEE_AUTH_STATUS = "earthengine-api missing"
+        logger.warning("earthengine-api not installed. GEE unavailable.")
+        return
+
+    service_account_json = os.environ.get("GEE_SERVICE_ACCOUNT_JSON")
+    project_id = os.environ.get("GEE_PROJECT_ID", "").strip()
+
+    # 1. Production Mode: Service Account Authentication
+    if service_account_json and service_account_json.strip():
+        GEE_AUTH_MODE = "Service Account"
+        
+        # Check GEE_PROJECT_ID presence
+        if not project_id:
+            GEE_AUTH_STATUS = "GEE_PROJECT_ID environment variable is missing"
+            logger.error("GEE AUTH ERROR: GEE_PROJECT_ID environment variable is missing.")
+            return
+
+        # Parse JSON
+        try:
+            key_dict = json.loads(service_account_json)
+        except Exception as e:
+            GEE_AUTH_STATUS = f"Invalid JSON in GEE_SERVICE_ACCOUNT_JSON: {e}"
+            logger.error("GEE AUTH ERROR: Invalid JSON in GEE_SERVICE_ACCOUNT_JSON environment variable.")
+            return
+
+        client_email = key_dict.get("client_email")
+        if not client_email:
+            GEE_AUTH_STATUS = "Missing client_email in GEE_SERVICE_ACCOUNT_JSON"
+            logger.error("GEE AUTH ERROR: Missing client_email in GEE_SERVICE_ACCOUNT_JSON key data.")
+            return
+
+        try:
+            credentials = ee.ServiceAccountCredentials(
+                client_email,
+                key_data=service_account_json
+            )
+            ee.Initialize(credentials, project=project_id)
+            GEE_AVAILABLE = True
+            GEE_AUTH_STATUS = "Authenticated"
+            GEE_ACTIVE_PROJECT = project_id
+            masked = _mask_email(client_email)
+            GEE_SERVICE_ACCOUNT_EMAIL = masked
+            logger.info(f"GEE AUTH SUCCESS:\nservice account={masked}\nproject={project_id}")
+        except Exception as e:
+            err_str = str(e)
+            if "not enabled" in err_str.lower():
+                GEE_AUTH_STATUS = f"Earth Engine API not enabled for project {project_id}"
+            elif "permission" in err_str.lower() or "denied" in err_str.lower():
+                GEE_AUTH_STATUS = f"Insufficient IAM permissions for service account {client_email}"
+            elif "not registered" in err_str.lower() or "not found" in err_str.lower():
+                GEE_AUTH_STATUS = f"Project {project_id} is not registered for Earth Engine"
+            else:
+                GEE_AUTH_STATUS = f"Authentication failed: {err_str}"
+            logger.error(f"GEE AUTH ERROR: {GEE_AUTH_STATUS}")
+            return
+
+    # 2. Local Development Fallback Mode (User Authentication / Local OAuth)
+    else:
+        GEE_AUTH_MODE = "Local User Auth"
+        if not project_id:
+            GEE_AUTH_STATUS = "GEE_PROJECT_ID is not set (and no GEE_SERVICE_ACCOUNT_JSON provided)"
+            logger.warning("GEE Local Auth Warning: GEE_PROJECT_ID environment variable is missing.")
+            return
+
+        try:
+            ee.Initialize(project=project_id, opt_url='https://earthengine-highvolume.googleapis.com')
+            GEE_AVAILABLE = True
+            GEE_AUTH_STATUS = "Authenticated"
+            GEE_ACTIVE_PROJECT = project_id
+            logger.info(f"Google Earth Engine initialized locally with project {project_id}.")
+        except Exception as e:
+            GEE_AUTH_STATUS = f"Local GEE init failed: {e}"
+            logger.warning(f"GEE Local Initialization failed: {e}")
+
+_init_earth_engine()
 
 
 class GEESource:

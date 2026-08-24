@@ -15,7 +15,7 @@ except ImportError:
 
 import ee
 
-GEE_PROJECT = os.environ.get("GEE_PROJECT_ID", "solvenest-earth-engine")
+GEE_PROJECT = os.environ.get("GEE_PROJECT_ID", "")
 
 print("=" * 60)
 print("Google Earth Engine Authentication")
