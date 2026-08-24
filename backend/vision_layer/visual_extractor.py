@@ -125,13 +125,26 @@ class EOVisionExtractor:
             "visual_summary": summary_text
         }
 
-    def analyze_files(self, files_list) -> Dict[str, Any]:
+    def analyze_files(self, files_list, ml_service=None) -> Dict[str, Any]:
         import io
+        import time
+        import logging
+        import gc
         import numpy as np
         from PIL import Image
 
+        start_time = time.time()
+        logger = logging.getLogger(__name__)
+
         if not files_list:
             raise ValueError("No files provided for analysis.")
+
+        # Limit maximum number of uploaded band files to 8 for Render memory safety
+        if len(files_list) > 8:
+            return {"success": False, "error": "Maximum 8 band files can be uploaded at once."}
+
+        logger.info(f"[ImageAnalysis] received {len(files_list)} files")
+        print(f"[ImageAnalysis] received {len(files_list)} files")
 
         try:
             # ---------------------------------------------------------
@@ -141,17 +154,18 @@ class EOVisionExtractor:
                 import rasterio
                 from rasterio.io import MemoryFile
                 from rasterio.warp import reproject, Resampling
-                
+                import re
+
                 parsed_bands = {}
                 band_meta = {}
                 geo_referenced = False
                 
-                # 1. First pass: Identify bands and find the reference grid (10m)
+                # 1. Identify bands first
                 reference_band = None
                 
                 for filename, file_bytes in files_list:
                     upper_name = filename.upper()
-                    import re
+                    band_id = None
                     if re.search(r'[\._\-]B8A[\._\-]|B8A(?=\.\w+$)|\bB8A\b', upper_name): band_id = "B8A"
                     elif re.search(r'[\._\-]B0?1[\._\-]|B0?1(?=\.\w+$)|\bB0?1\b', upper_name): band_id = "B01"
                     elif re.search(r'[\._\-]B0?2[\._\-]|B0?2(?=\.\w+$)|\bB0?2\b', upper_name): band_id = "B02"
@@ -169,8 +183,6 @@ class EOVisionExtractor:
                         continue
                         
                     parsed_bands[band_id] = file_bytes
-                    
-                    # 10m bands are B02, B03, B04, B08
                     if band_id in ["B02", "B03", "B04", "B08"] and not reference_band:
                         reference_band = band_id
 
@@ -181,7 +193,6 @@ class EOVisionExtractor:
                         return {"success": False, "error": "No recognizable Sentinel-2 bands found in uploaded files."}
                 
                 if parsed_bands:
-                    # If no 10m band was found, use the first available band as reference
                     if not reference_band:
                         reference_band = list(parsed_bands.keys())[0]
 
@@ -191,7 +202,9 @@ class EOVisionExtractor:
                     ref_crs = None
                     resampling_info = []
 
-                    # 2. Extract reference metadata with downsampling for huge rasters (Render 512MB RAM cap)
+                    # 2. Extract reference metadata with downsampling for huge rasters
+                    logger.info(f"[ImageAnalysis] reading {reference_band}")
+                    print(f"[ImageAnalysis] reading {reference_band}")
                     try:
                         with MemoryFile(parsed_bands[reference_band]) as memfile:
                             with memfile.open() as src:
@@ -200,12 +213,11 @@ class EOVisionExtractor:
                                 ref_crs = src.crs
                                 geo_referenced = (ref_crs is not None)
 
-                                # Subsample to max 1200x1200 for Render memory safety (512MB RAM cap)
-                                max_dim = 1200
+                                max_dim = 1000
                                 orig_h, orig_w = src.height, src.width
                                 scale = min(1.0, max_dim / max(orig_h, orig_w))
-                                target_h = int(orig_h * scale)
-                                target_w = int(orig_w * scale)
+                                target_h = max(100, int(orig_h * scale))
+                                target_w = max(100, int(orig_w * scale))
 
                                 ref_profile['height'] = target_h
                                 ref_profile['width'] = target_w
@@ -224,10 +236,13 @@ class EOVisionExtractor:
                     except Exception as e:
                         return {"success": False, "error": f"Failed to read reference band {reference_band}: {str(e)}"}
 
-                    # 3. Read and resample other bands
+                    # 3. Read and resample other bands sequentially
                     for b_id in list(parsed_bands.keys()):
                         if b_id == reference_band:
                             continue
+
+                        logger.info(f"[ImageAnalysis] reading {b_id}")
+                        print(f"[ImageAnalysis] reading {b_id}")
 
                         b_bytes = parsed_bands[b_id]
                         try:
@@ -258,14 +273,15 @@ class EOVisionExtractor:
 
                     # Release raw byte memory immediately
                     del parsed_bands
-                    import gc
                     gc.collect()
 
-                    # 4. Proceed with spectral calculation
-                    # Avoid div zero
+                    # 4. Calculate indices
+                    logger.info("[ImageAnalysis] calculating indices")
+                    print("[ImageAnalysis] calculating indices")
+
                     for b in arrays:
                         arrays[b] = np.where(arrays[b] == 0, 1e-5, arrays[b])
-                        
+
                     first_band = list(arrays.values())[0]
                     total_pixels = float(first_band.shape[0] * first_band.shape[1])
                     valid_mask = ~np.isnan(first_band)
@@ -282,7 +298,7 @@ class EOVisionExtractor:
                         ndvi_val = round(float(np.nanmean(ndvi_map)), 4)
                     else:
                         ndvi_val = "NDVI unavailable — NIR band B08 or Red band B04 is required."
-                        
+
                     # NDWI
                     ndwi_val = None
                     if "B03" in arrays and "B08" in arrays:
@@ -303,16 +319,84 @@ class EOVisionExtractor:
                     else:
                         ndbi_val = "NDBI unavailable — NIR B08 and SWIR B11 are required."
 
-                    # Land cover prediction (heuristic for UI restoration)
+                    # EVI
+                    evi_val = None
+                    if "B08" in arrays and "B04" in arrays and "B02" in arrays:
+                        nir = arrays["B08"]
+                        red = arrays["B04"]
+                        blue = arrays["B02"]
+                        evi_map = 2.5 * ((nir - red) / (nir + 6.0 * red - 7.5 * blue + 1.0 + 1e-8))
+                        evi_val = round(float(np.nanmean(evi_map)), 4)
+
+                    # 5. Features and ExtraTrees Prediction
+                    logger.info("[ImageAnalysis] preparing features")
+                    print("[ImageAnalysis] preparing features")
+
                     pred_class = "Unknown"
-                    if isinstance(ndvi_val, float) and ndvi_val > 0.3:
-                        pred_class = "Vegetation"
-                    elif isinstance(ndwi_val, float) and ndwi_val > 0.1:
-                        pred_class = "Water"
-                    elif isinstance(ndbi_val, float) and ndbi_val > 0.1:
-                        pred_class = "Built-up"
-                    else:
-                        pred_class = "Barren / Mixed"
+                    pred_confidence = 0.85
+
+                    if ml_service and hasattr(ml_service, "active_model") and ml_service.active_model is not None:
+                        try:
+                            logger.info("[ImageAnalysis] running ExtraTrees prediction")
+                            print("[ImageAnalysis] running ExtraTrees prediction")
+                            
+                            # Construct 26-feature array for model inference using mean band values
+                            feat_dict = {}
+                            for b_name in ["B2", "B3", "B4", "B8", "B11", "B12"]:
+                                alt_b = f"B0{b_name[1]}" if len(b_name) == 2 and b_name[1].isdigit() else b_name
+                                b_arr = arrays.get(alt_b) if alt_b in arrays else arrays.get(f"B0{b_name[1]}" if len(b_name) == 2 else b_name)
+                                feat_dict[b_name] = float(np.nanmean(b_arr)) if b_arr is not None else 0.1
+
+                            b2_v, b3_v, b4_v = feat_dict.get("B2", 0.1), feat_dict.get("B3", 0.1), feat_dict.get("B4", 0.1)
+                            b8_v, b11_v, b12_v = feat_dict.get("B8", 0.1), feat_dict.get("B11", 0.1), feat_dict.get("B12", 0.1)
+
+                            eps = 1e-8
+                            ndvi_f = (b8_v - b4_v) / (b8_v + b4_v + eps)
+                            ndwi_f = (b3_v - b8_v) / (b3_v + b8_v + eps)
+                            mndwi_f = (b3_v - b11_v) / (b3_v + b11_v + eps)
+                            ndbi_f = (b11_v - b8_v) / (b11_v + b8_v + eps)
+                            bsi_f = ((b11_v + b4_v) - (b8_v + b2_v)) / ((b11_v + b4_v) + (b8_v + b2_v) + eps)
+                            savi_f = 1.5 * (b8_v - b4_v) / (b8_v + b4_v + 0.5 + eps)
+                            nbr_f = (b8_v - b12_v) / (b8_v + b12_v + eps)
+                            evi_f = 2.5 * ((b8_v - b4_v) / (b8_v + 6.0 * b4_v - 7.5 * b2_v + 1.0 + eps))
+                            ui_f = (b12_v - b8_v) / (b12_v + b8_v + eps)
+                            ndmi_f = (b8_v - b11_v) / (b8_v + b11_v + eps)
+                            grvi_f = (b3_v - b4_v) / (b3_v + b4_v + eps)
+                            brightness_f = (b2_v + b3_v + b4_v + b8_v) / 4.0
+                            greenness_f = (b3_v + b8_v) / 2.0
+                            swir_ratio_f = b11_v / (b12_v + eps)
+                            nir_red_ratio_f = b8_v / (b4_v + eps)
+                            nir_green_ratio_f = b8_v / (b3_v + eps)
+                            ndbi_ndvi_diff_f = ndbi_f - ndvi_f
+                            mndwi_ndvi_diff_f = mndwi_f - ndvi_f
+
+                            sample_row = np.array([[
+                                b2_v, b3_v, b4_v, b8_v, b11_v, b12_v,
+                                ndvi_f, ndwi_f, mndwi_f, ndbi_f,
+                                bsi_f, savi_f, nbr_f, evi_f, ui_f, ndmi_f, grvi_f,
+                                brightness_f, greenness_f, swir_ratio_f, nir_red_ratio_f, nir_green_ratio_f,
+                                ndbi_ndvi_diff_f, mndwi_ndvi_diff_f,
+                                0.0, 0.0  # VV, VH default
+                            ]], dtype=np.float32)
+
+                            preds = ml_service.active_model.predict(sample_row)
+                            probs = ml_service.active_model.predict_proba(sample_row)
+                            
+                            pred_idx = int(preds[0])
+                            pred_class = ml_service.CLASS_NAMES.get(pred_idx, "Unknown")
+                            pred_confidence = round(float(np.max(probs[0])), 2)
+                        except Exception as p_err:
+                            logger.warning(f"[ImageAnalysis] ExtraTrees prediction fallback: {p_err}")
+
+                    if pred_class == "Unknown":
+                        if isinstance(ndvi_val, float) and ndvi_val > 0.3:
+                            pred_class = "Vegetation"
+                        elif isinstance(ndwi_val, float) and ndwi_val > 0.1:
+                            pred_class = "Water"
+                        elif isinstance(ndbi_val, float) and ndbi_val > 0.1:
+                            pred_class = "Built-up"
+                        else:
+                            pred_class = "Barren / Mixed"
 
                     # Interpretations
                     def get_interpretation(index_name, val):
@@ -335,15 +419,18 @@ class EOVisionExtractor:
                     analysis_text += "Note: Spectral index formulas (like NDVI) use relative band ratios, so any uniform Sentinel-2 scaling factor (e.g., 10000) cancels out mathematically. Index values are true unscaled reflectances. "
                     if resampling_info:
                         analysis_text += " " + ", ".join(resampling_info) + "."
-                    
-                    return {
+
+                    logger.info("[ImageAnalysis] generating response")
+                    print("[ImageAnalysis] generating response")
+
+                    result_obj = {
                         "analysis_type": "multispectral",
                         "source": "Sentinel-2 GeoTIFF",
                         "verification": "Spectral data verified",
                         "is_quantitative": True,
                         "prediction": {
                             "class": pred_class,
-                            "confidence": 0.85 # Heuristic pseudo-confidence
+                            "confidence": pred_confidence
                         },
                         "accuracy": None,
                         "image_quality": {
@@ -364,6 +451,11 @@ class EOVisionExtractor:
                         },
                         "analysis": analysis_text
                     }
+
+                    elapsed = time.time() - start_time
+                    logger.info(f"[ImageAnalysis] completed in {elapsed:.2f} seconds")
+                    print(f"[ImageAnalysis] completed in {elapsed:.2f} seconds")
+                    return result_obj
 
             # ---------------------------------------------------------
             # VISUAL MODE FALLBACK (RGB PNG/JPG)

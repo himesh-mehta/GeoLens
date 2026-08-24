@@ -428,7 +428,7 @@ def analyze_image():
                     files_list.append((f.filename, f.read()))
             
             if files_list:
-                vis_comp = vision_ext.analyze_files(files_list)
+                vis_comp = vision_ext.analyze_files(files_list, ml_service=ml_service)
                 if "success" not in vis_comp:
                     vis_comp["success"] = True
                 return jsonify(vis_comp)

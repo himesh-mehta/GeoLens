@@ -125,7 +125,7 @@ export const BackendAPI = {
         formData.append('files', fileOrPointId as File);
       }
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
       try {
         const res = await fetch(`${API_BASE}/api/analyze-image`, {
           method: 'POST',
