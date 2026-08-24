@@ -227,48 +227,68 @@ export default function ImageAnalysisPage() {
     setProgressPercent(0);
 
     try {
-      const progressPromise = simulateProgress();
-      // Send multiple files if array has > 1, else send the single file
-      const resPromise = BackendAPI.analyzeImage(selectedFiles.length === 1 ? selectedFiles[0] : selectedFiles);
-      
-      await progressPromise; // wait for initial progress steps
-      const res = await resPromise; // wait for real api call
-      
-      if (res && ((res as any).success !== false) && !(res as any).error) {
+      // ── Stage 1: uploading (visual feedback while we read TIFFs client-side) ──
+      setProgressStage(1);
+      setProgressText(selectedFiles.length > 1 ? "Reading band files locally..." : "Reading image locally...");
+      setProgressPercent(10);
+
+      // ── Stage 2 ──
+      await new Promise(r => setTimeout(r, 200));
+      setProgressStage(2);
+      setProgressText("Reading raster metadata...");
+      setProgressPercent(25);
+
+      // ── Stage 3–5: sample TIFFs in browser with geotiff.js ──
+      // Dynamic import so geotiff.js is not in the initial bundle
+      const { computeBandMeans } = await import('@/lib/tiff-reader');
+
+      setProgressStage(3);
+      setProgressText("Detecting Sentinel-2 bands...");
+      setProgressPercent(35);
+
+      const bandMeans = await computeBandMeans(
+        selectedFiles,
+        (done, total, bandId) => {
+          const pct = 35 + Math.round((done / total) * 40);  // 35% → 75%
+          setProgressPercent(pct);
+          setProgressText(`Sampling band ${bandId} (${done}/${total})...`);
+          setProgressStage(3 + done);
+        }
+      );
+
+      if (Object.keys(bandMeans).length === 0) {
+        setError('Could not read any band data from the uploaded files. Ensure they are valid Sentinel-2 GeoTIFFs.');
+        return;
+      }
+
+      // ── Stage 6: send band means to backend ──
+      setProgressStage(6);
+      setProgressText("Calculating spectral indices...");
+      setProgressPercent(80);
+
+      const res = await BackendAPI.analyzeSpectral(bandMeans);
+
+      if (res && res.success !== false && !res.error) {
         setProgressStage(7);
         setProgressText("Preparing analysis...");
         setProgressPercent(95);
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 200));
 
         setProgressStage(8);
         setProgressText("Complete");
         setProgressPercent(100);
-        await new Promise(r => setTimeout(r, 200));
-        
+        await new Promise(r => setTimeout(r, 150));
+
         const data = res as any;
         setResult(data);
-        
-        // Detailed console logging required by spec
+
         console.log("==========================================");
-        if (selectedFiles.length === 1) {
-          console.log("[IMAGE ANALYZER] File:", selectedFiles[0].name);
-          console.log("[IMAGE ANALYZER] MIME:", selectedFiles[0].type);
-        } else {
-          console.log("[IMAGE ANALYZER] Files:", selectedFiles.map(f => f.name));
-        }
+        console.log("[IMAGE ANALYZER] Files:", selectedFiles.map(f => f.name));
+        console.log("[IMAGE ANALYZER] Band means:", bandMeans);
         console.log("[IMAGE ANALYZER] Analysis type:", data.analysis_type);
-        console.log("[IMAGE ANALYZER] Source:", data.source);
-        console.log("[IMAGE ANALYZER] Verification:", data.verification);
         console.log("[IMAGE ANALYZER] Prediction:", data.prediction);
         console.log("[IMAGE ANALYZER] Spectral indices:", data.spectral_indices);
-        console.log("[IMAGE ANALYZER] Image quality:", data.image_quality);
-        if (data.analysis_type === "multispectral" && data.image_quality) {
-          console.log("[IMAGE ANALYZER] Bands detected:", data.image_quality.bands);
-          console.log("[IMAGE ANALYZER] Available spectral bands:", data.image_quality.detected_bands);
-          console.log("[IMAGE ANALYZER] Valid pixel percentage:", data.image_quality.valid_pixel_percentage);
-        }
         console.log("==========================================");
-        
       } else {
         setError((res as any)?.error || 'Image analysis could not be completed.');
       }

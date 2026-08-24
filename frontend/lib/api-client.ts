@@ -174,6 +174,24 @@ export const BackendAPI = {
     }
   },
 
+  /**
+   * analyzeSpectral — sends pre-computed band means as JSON.
+   * No file upload. Browser reads GeoTIFFs with geotiff.js and sends only scalars.
+   */
+  analyzeSpectral: async (bandMeans: Record<string, number>): Promise<any> => {
+    const res = await fetch(`${API_BASE}/api/analyze-spectral`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ band_means: bandMeans }),
+      signal: AbortSignal.timeout(30000)  // 30s plenty — only math, no file I/O
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || `Backend error: ${res.status}`);
+    }
+    return res.json();
+  },
+
   submitFeedback: (pointId: number, verdict: string, notes?: string) =>
     fetchFromBackend('/api/feedback', {
       method: 'POST',
