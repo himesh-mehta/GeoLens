@@ -84,6 +84,9 @@ from flask_cors import CORS
 
 app = Flask(__name__, template_folder="templates")
 
+# Allow up to 200 MB uploads (4 Sentinel-2 TIFFs ≈ 60 MB compressed)
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB
+
 # Initialize Flask-CORS for global preflight and error handling
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
@@ -411,27 +414,53 @@ def get_eo_data(point_id: int):
 def analyze_image():
     """EO Vision analysis (POST version). Supports uploaded files, base64 images."""
     import gc
+    import time
+    req_start = time.time()
     try:
+        # ── Diagnostics ─────────────────────────────────────────────────────────
+        content_type = request.content_type or ""
+        all_file_keys = list(request.files.keys())
+        print(f"[IMAGE] REQUEST RECEIVED")
+        print(f"[IMAGE] content_type = {content_type[:120]}")
+        print(f"[IMAGE] file keys in request = {all_file_keys}")
+        logger.info(f"[IMAGE] REQUEST RECEIVED | content_type={content_type[:80]} | file_keys={all_file_keys}")
+
         # Check if multiple files are uploaded via 'files' key (FormData)
         uploaded_files = request.files.getlist("files")
-        
+        print(f"[IMAGE] files from 'files' key = {len(uploaded_files)}")
+
         # Fallback to 'file' or 'image' if 'files' is empty
         if not uploaded_files:
             single_file = request.files.get("file") or request.files.get("image")
             if single_file:
                 uploaded_files = [single_file]
-                
+                print(f"[IMAGE] fallback: found single file under 'file'/'image' key")
+
         if uploaded_files:
             files_list = []
             for f in uploaded_files:
+                raw = f.read()
+                size_mb = len(raw) / (1024 * 1024)
+                print(f"[IMAGE] received file '{f.filename}' size={size_mb:.2f} MB")
+                logger.info(f"[IMAGE] file '{f.filename}' size={size_mb:.2f} MB")
                 if f.filename:
-                    files_list.append((f.filename, f.read()))
-            
+                    files_list.append((f.filename, raw))
+
+            print(f"[IMAGE] total valid files = {len(files_list)}")
+
             if files_list:
+                print("[IMAGE] validation passed — calling analyze_files")
                 vis_comp = vision_ext.analyze_files(files_list, ml_service=ml_service)
                 if "success" not in vis_comp:
                     vis_comp["success"] = True
+                elapsed = time.time() - req_start
+                print(f"[IMAGE] REQUEST COMPLETED in {elapsed:.2f}s")
                 return jsonify(vis_comp)
+            else:
+                print("[IMAGE] 400 REASON: uploaded_files list had no valid filenames")
+                return jsonify({"success": False, "error": "No valid files provided (filenames missing)."}), 400
+        else:
+            print(f"[IMAGE] no multipart files found — checking JSON body")
 
         data = request.get_json(silent=True) or {}
         image_b64 = data.get("image_base64")
@@ -440,20 +469,28 @@ def analyze_image():
             if "," in image_b64:
                 image_b64 = image_b64.split(",", 1)[1]
             file_bytes = base64.b64decode(image_b64)
-            # base64 is a single file, default filename
-            vis_comp = vision_ext.analyze_files([("base64.png", file_bytes)])
+            vis_comp = vision_ext.analyze_files([("base64.png", file_bytes)], ml_service=ml_service)
             if "success" not in vis_comp:
                 vis_comp["success"] = True
+            elapsed = time.time() - req_start
+            print(f"[IMAGE] REQUEST COMPLETED (base64 path) in {elapsed:.2f}s")
             return jsonify(vis_comp)
-            
-        return jsonify({"success": False, "error": "No image provided"}), 400
+
+        print(f"[IMAGE] 400 REASON: no files and no image_base64 in JSON body — content_type={content_type[:80]}")
+        logger.warning(f"[IMAGE] 400: no files received. file_keys={all_file_keys} content_type={content_type[:80]}")
+        return jsonify({"success": False, "error": "No image provided. Expected multipart/form-data with 'files' field."}), 400
+
     except MemoryError:
-        logger.error("Memory limit exceeded during image analysis.")
+        logger.error("[IMAGE] Memory limit exceeded during image analysis.")
+        print("[IMAGE] MemoryError — returning 413")
         return jsonify({
             "success": False,
             "error": "Memory limit exceeded while processing band files. Try uploading smaller sub-crop band files."
         }), 413
     except Exception as e:
+        elapsed = time.time() - req_start
+        logger.error(f"[IMAGE] Exception after {elapsed:.2f}s: {e}")
+        print(f"[IMAGE] EXCEPTION after {elapsed:.2f}s: {e}")
         return jsonify({"success": False, "error": f"Unable to analyze uploaded image: {str(e)}"}), 500
     finally:
         gc.collect()
