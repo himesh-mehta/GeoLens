@@ -380,6 +380,7 @@ def get_eo_data(point_id: int):
 @app.route("/api/analyze-image", methods=["POST"])
 def analyze_image():
     """EO Vision analysis (POST version). Supports uploaded files, base64 images."""
+    import gc
     try:
         # Check if multiple files are uploaded via 'files' key (FormData)
         uploaded_files = request.files.getlist("files")
@@ -416,8 +417,16 @@ def analyze_image():
             return jsonify(vis_comp)
             
         return jsonify({"success": False, "error": "No image provided"}), 400
+    except MemoryError:
+        logger.error("Memory limit exceeded during image analysis.")
+        return jsonify({
+            "success": False,
+            "error": "Memory limit exceeded while processing band files. Try uploading smaller sub-crop band files."
+        }), 413
     except Exception as e:
         return jsonify({"success": False, "error": f"Unable to analyze uploaded image: {str(e)}"}), 500
+    finally:
+        gc.collect()
 
 
 @app.route("/api/inspect-bands", methods=["POST"])

@@ -151,19 +151,19 @@ class EOVisionExtractor:
                 
                 for filename, file_bytes in files_list:
                     upper_name = filename.upper()
-                    band_id = None
-                    if "B01" in upper_name: band_id = "B01"
-                    elif "B02" in upper_name: band_id = "B02"
-                    elif "B03" in upper_name: band_id = "B03"
-                    elif "B04" in upper_name: band_id = "B04"
-                    elif "B05" in upper_name: band_id = "B05"
-                    elif "B06" in upper_name: band_id = "B06"
-                    elif "B07" in upper_name: band_id = "B07"
-                    elif "B08" in upper_name: band_id = "B08"
-                    elif "B8A" in upper_name: band_id = "B8A"
-                    elif "B09" in upper_name: band_id = "B09"
-                    elif "B11" in upper_name: band_id = "B11"
-                    elif "B12" in upper_name: band_id = "B12"
+                    import re
+                    if re.search(r'[\._\-]B8A[\._\-]|B8A(?=\.\w+$)|\bB8A\b', upper_name): band_id = "B8A"
+                    elif re.search(r'[\._\-]B0?1[\._\-]|B0?1(?=\.\w+$)|\bB0?1\b', upper_name): band_id = "B01"
+                    elif re.search(r'[\._\-]B0?2[\._\-]|B0?2(?=\.\w+$)|\bB0?2\b', upper_name): band_id = "B02"
+                    elif re.search(r'[\._\-]B0?3[\._\-]|B0?3(?=\.\w+$)|\bB0?3\b', upper_name): band_id = "B03"
+                    elif re.search(r'[\._\-]B0?4[\._\-]|B0?4(?=\.\w+$)|\bB0?4\b', upper_name): band_id = "B04"
+                    elif re.search(r'[\._\-]B0?5[\._\-]|B0?5(?=\.\w+$)|\bB0?5\b', upper_name): band_id = "B05"
+                    elif re.search(r'[\._\-]B0?6[\._\-]|B0?6(?=\.\w+$)|\bB0?6\b', upper_name): band_id = "B06"
+                    elif re.search(r'[\._\-]B0?7[\._\-]|B0?7(?=\.\w+$)|\bB0?7\b', upper_name): band_id = "B07"
+                    elif re.search(r'[\._\-]B0?8[\._\-]|B0?8(?=\.\w+$)|\bB0?8\b', upper_name): band_id = "B08"
+                    elif re.search(r'[\._\-]B0?9[\._\-]|B0?9(?=\.\w+$)|\bB0?9\b', upper_name): band_id = "B09"
+                    elif re.search(r'[\._\-]B11[\._\-]|B11(?=\.\w+$)|\bB11\b', upper_name): band_id = "B11"
+                    elif re.search(r'[\._\-]B12[\._\-]|B12(?=\.\w+$)|\bB12\b', upper_name): band_id = "B12"
                     
                     if not band_id:
                         continue
@@ -191,39 +191,56 @@ class EOVisionExtractor:
                     ref_crs = None
                     resampling_info = []
 
-                    # 2. Extract reference metadata
+                    # 2. Extract reference metadata with downsampling for huge rasters (Render 512MB RAM cap)
                     try:
                         with MemoryFile(parsed_bands[reference_band]) as memfile:
                             with memfile.open() as src:
-                                ref_profile = src.profile
+                                ref_profile = src.profile.copy()
                                 ref_transform = src.transform
                                 ref_crs = src.crs
                                 geo_referenced = (ref_crs is not None)
-                                arrays[reference_band] = src.read(1).astype(np.float32)
+
+                                # Subsample to max 1200x1200 for Render memory safety (512MB RAM cap)
+                                max_dim = 1200
+                                orig_h, orig_w = src.height, src.width
+                                scale = min(1.0, max_dim / max(orig_h, orig_w))
+                                target_h = int(orig_h * scale)
+                                target_w = int(orig_w * scale)
+
+                                ref_profile['height'] = target_h
+                                ref_profile['width'] = target_w
+
+                                if scale < 1.0:
+                                    arrays[reference_band] = src.read(
+                                        1,
+                                        out_shape=(target_h, target_w),
+                                        resampling=Resampling.bilinear
+                                    ).astype(np.float32)
+                                    resampling_info.append(f"Grid downsampled ({orig_w}x{orig_h} -> {target_w}x{target_h}) for memory safety")
+                                else:
+                                    arrays[reference_band] = src.read(1).astype(np.float32)
+
                                 band_meta[reference_band] = "10m" if reference_band in ["B02", "B03", "B04", "B08"] else "Unknown"
                     except Exception as e:
                         return {"success": False, "error": f"Failed to read reference band {reference_band}: {str(e)}"}
 
                     # 3. Read and resample other bands
-                    for b_id, b_bytes in parsed_bands.items():
+                    for b_id in list(parsed_bands.keys()):
                         if b_id == reference_band:
                             continue
-                            
+
+                        b_bytes = parsed_bands[b_id]
                         try:
                             with MemoryFile(b_bytes) as memfile:
                                 with memfile.open() as src:
                                     is_20m = b_id in ["B05", "B06", "B07", "B8A", "B11", "B12"]
                                     band_meta[b_id] = "20m" if is_20m else ("10m" if b_id in ["B02", "B03", "B04", "B08"] else "Unknown")
-                                    
-                                    # Check if resampling is needed
-                                    if src.width != ref_profile['width'] or src.height != ref_profile['height']:
-                                        # Need to resample
-                                        resampling_info.append(f"{b_id} resampled to match {reference_band} grid")
-                                        dst_array = np.zeros((ref_profile['height'], ref_profile['width']), dtype=np.float32)
-                                        
-                                        # Ensure CRSs match or are provided, fallback to pure array scaling if no CRS
+
+                                    if src.width != target_w or src.height != target_h:
+                                        resampling_info.append(f"{b_id} aligned to reference grid ({target_w}x{target_h})")
+                                        dst_array = np.zeros((target_h, target_w), dtype=np.float32)
                                         src_crs = src.crs if src.crs else ref_crs
-                                        
+
                                         reproject(
                                             source=rasterio.band(src, 1),
                                             destination=dst_array,
@@ -238,6 +255,11 @@ class EOVisionExtractor:
                                         arrays[b_id] = src.read(1).astype(np.float32)
                         except Exception as e:
                             return {"success": False, "error": f"Failed to read or resample band {b_id}: {str(e)}"}
+
+                    # Release raw byte memory immediately
+                    del parsed_bands
+                    import gc
+                    gc.collect()
 
                     # 4. Proceed with spectral calculation
                     # Avoid div zero

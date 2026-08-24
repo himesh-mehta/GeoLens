@@ -234,12 +234,12 @@ export default function ImageAnalysisPage() {
       await progressPromise; // wait for initial progress steps
       const res = await resPromise; // wait for real api call
       
-      setProgressStage(7);
-      setProgressText("Preparing analysis...");
-      setProgressPercent(95);
-      await new Promise(r => setTimeout(r, 400));
-      
-      if (res && (res as any).success) {
+      if (res && ((res as any).success !== false) && !(res as any).error) {
+        setProgressStage(7);
+        setProgressText("Preparing analysis...");
+        setProgressPercent(95);
+        await new Promise(r => setTimeout(r, 300));
+
         setProgressStage(8);
         setProgressText("Complete");
         setProgressPercent(100);
@@ -272,9 +272,9 @@ export default function ImageAnalysisPage() {
       } else {
         setError((res as any)?.error || 'Image analysis could not be completed.');
       }
-    } catch (err) {
-      console.error(err);
-      setError('Image analysis could not be completed.');
+    } catch (err: any) {
+      console.error('[IMAGE ANALYZER] Error during analysis:', err);
+      setError(err?.message || 'Image analysis could not be completed.');
     } finally {
       setIsAnalyzing(false);
       setProgressStage(9);

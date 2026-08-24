@@ -124,12 +124,27 @@ export const BackendAPI = {
       } else {
         formData.append('files', fileOrPointId as File);
       }
-      const res = await fetch(`${API_BASE}/api/analyze-image`, {
-        method: 'POST',
-        body: formData
-      });
-      if (!res.ok) throw new Error(`Backend error: ${res.status}`);
-      return res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      try {
+        const res = await fetch(`${API_BASE}/api/analyze-image`, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || errData.message || `Backend error: ${res.status}`);
+        }
+        return await res.json();
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+          throw new Error('Analysis timed out. Please try uploading smaller band files or fewer files at once.');
+        }
+        throw err;
+      }
     } else if (typeof fileOrPointId === 'string') {
       return fetchFromBackend('/api/analyze-image', {
         method: 'POST',
